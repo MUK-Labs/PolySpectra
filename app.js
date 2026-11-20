@@ -93,7 +93,10 @@
     systems: ["12", "31"],
     refColumns: true,
     limit: 12,
-    view: "partial",
+    view: "map",
+    mapUnit: "cents",
+    mapCamera: null,
+    mapRefs: false,
     grouped: false,
     muted: false,
     selected: { id: "cello", n: 3 },
@@ -131,12 +134,29 @@
         s.selected.n > s.limit
       )
         return defaults;
-      return { ...defaults, ...s };
+      return {
+        ...defaults,
+        ...s,
+        mapUnit: s.mapUnit === "hz" ? "hz" : "cents",
+        mapRefs: s.mapRefs === true,
+        mapCamera:
+          Number.isFinite(s.mapCamera?.center) &&
+          Number.isFinite(s.mapCamera?.span) &&
+          s.mapCamera.span > 0
+            ? s.mapCamera
+            : null,
+      };
     } catch {
       return defaults;
     }
   }
   const state = readWorkspace();
+  const linkedViews = {
+    "#pitch-map": "map",
+    "#by-partial": "partial",
+    "#by-pitch": "pitch",
+  };
+  if (linkedViews[location.hash]) state.view = linkedViews[location.hash];
   const esc = (s) =>
     String(s).replace(
       /[&<>"']/g,
@@ -154,10 +174,16 @@
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
-  const delta = (c) =>
-    (Math.abs(c) < 0.05
-      ? "0.0"
-      : (c > 0 ? "+" : "−") + Math.abs(c).toFixed(1)) + " ¢";
+  function delta(c) {
+    const magnitude = Math.abs(c);
+    if (magnitude < 1e-9) return "0.0 ¢";
+    const digits =
+      state.view === "map" && magnitude < 0.1
+        ? Math.min(8, 1 - Math.floor(Math.log10(magnitude)))
+        : 1;
+    if (magnitude < 0.5 * 10 ** -digits) return "0.0 ¢";
+    return (c > 0 ? "+" : "−") + magnitude.toFixed(digits) + " ¢";
+  }
   const pnum = (n) => "P" + String(n).padStart(2, "0");
   const getSource = (id) => state.sources.find((s) => s.id === id);
   const selected = () => getSource(state.selected.id);
@@ -490,10 +516,418 @@
       " <small>Hz</small></span></button>"
     );
   }
+  const M = globalThis.PitchMap;
+  const mapHeight = () =>
+    Math.max(320, Math.min(510, Math.round(window.innerHeight * 0.51)));
+  const mapUnit = () => state.mapUnit;
+  const mapExtent = () => M.extent(state.sources, state.limit, mapUnit());
+  function mapCamera() {
+    const full = mapExtent();
+    return state.mapCamera
+      ? M.constrain(
+          state.mapCamera.center,
+          state.mapCamera.span,
+          full,
+          mapUnit(),
+        )
+      : full;
+  }
+  const mapValue = (f) => M.coordinate(f, mapUnit());
+  function showSelection() {
+    if (state.view !== "map" || !state.mapCamera) return;
+    const camera = mapCamera(),
+      value = mapValue(selectedHz());
+    const pos = M.y(value, camera);
+    if (pos < 0.025 || pos > 0.975)
+      state.mapCamera = M.constrain(value, camera.span, mapExtent(), mapUnit());
+  }
+  function mapFrequency(f, camera) {
+    const center = mapValue(f);
+    const increment =
+      M.frequency(center + camera.span / mapHeight(), mapUnit()) - f;
+    const digits = Math.min(
+      10,
+      Math.max(2, 1 - Math.floor(Math.log10(increment))),
+    );
+    return f.toLocaleString("en-US", {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+  }
+  function mapReadout(camera, full) {
+    const factor = full.span / camera.span,
+      fraction = Math.log(factor) / Math.log(full.span / M.minSpan(mapUnit()));
+    $("zoom-range").value = Math.round(fraction * 1000);
+    const magnitude =
+      factor.toLocaleString("en-US", {
+        maximumFractionDigits: factor < 10 ? 1 : 0,
+      }) + "×";
+    $("zoom-readout").textContent = magnitude;
+    $("zoom-range").setAttribute("aria-valuetext", magnitude);
+    $("zoom-out").disabled = factor < 1.000001;
+    $("zoom-in").disabled = camera.span <= M.minSpan(mapUnit()) * 1.000001;
+    $("frame-pair").disabled = state.sources.length < 2;
+    $("map-refs").checked = state.mapRefs;
+    $("map-unit").value = mapUnit();
+    const unit = mapUnit() === "hz" ? "Hz" : "¢";
+    const span = Number(camera.span.toPrecision(4)).toLocaleString("en-US", {
+      maximumFractionDigits: 7,
+    });
+    $("view-note").textContent =
+      span +
+      " " +
+      unit +
+      " in view" +
+      (mapUnit() === "cents" &&
+      camera.span / Math.max(3, Math.floor(mapHeight() / 46)) < 50
+        ? " · 0¢ = " + selected().name + " " + pnum(state.selected.n)
+        : "") +
+      " · Drag to pan · Pinch or Ctrl/⌘-scroll to zoom";
+  }
+  function pitchMarkLane(marks, guides, selectedY, camera, source) {
+    // Labels can thin out independently; every mark keeps its physical position.
+    const sorted = [...marks].sort(
+      (a, b) =>
+        Number(b.selected) - Number(a.selected) || a.position - b.position,
+    );
+    const ordered = [...marks].sort((a, b) => a.position - b.position);
+    const heights = new Map(
+      ordered.map((m, i) => {
+        const above = ordered[i - 1]?.position ?? -Infinity,
+          below = ordered[i + 1]?.position ?? Infinity;
+        return [
+          m,
+          Math.min(
+            24,
+            mapHeight() * Math.min(m.position - above, below - m.position),
+          ),
+        ];
+      }),
+    );
+    const labels = [];
+    const visible = sorted.map((m) => {
+      const show = labels.every(
+        (v) => Math.abs(v - m.position) * mapHeight() >= 17,
+      );
+      if (show) labels.push(m.position);
+      const exact = mapFrequency(m.f, camera),
+        info = source
+          ? source.name + " · " + pnum(m.n) + " · " + noteName(m.f)
+          : m.label;
+      const caption = source ? pnum(m.n) + " " + noteName(m.f) : m.label;
+      const attrs = source
+        ? 'data-src="' +
+          source.id +
+          '" data-n="' +
+          m.n +
+          '" aria-pressed="' +
+          m.selected +
+          '" tabindex="' +
+          (m.selected ? 0 : -1) +
+          '"'
+        : 'data-tone="' + m.f + '" tabindex="-1"';
+      return (
+        '<button class="map-mark" ' +
+        attrs +
+        ' style="top:' +
+        m.position * 100 +
+        "%;height:" +
+        heights.get(m) +
+        'px" title="' +
+        esc(info) +
+        " · " +
+        exact +
+        ' Hz" aria-label="' +
+        esc(info) +
+        ", " +
+        exact +
+        ' hertz"><span class="map-segment"></span>' +
+        (show ? '<span class="mark-caption">' + esc(caption) + "</span>" : "") +
+        "</button>"
+      );
+    });
+    const guide =
+      selectedY >= 0 && selectedY <= 1
+        ? '<span class="selection-guide" style="top:' +
+          selectedY * 100 +
+          '%"></span>'
+        : "";
+    return (
+      '<td class="map-track" ' +
+      (source ? 'style="' + colors(source.color) + '"' : "") +
+      '><div class="map-lane">' +
+      guides +
+      guide +
+      visible.join("") +
+      "</div></td>"
+    );
+  }
+  function mapRows(ss, refs) {
+    const camera = mapCamera(),
+      height = mapHeight(),
+      unit = mapUnit();
+    const selectedY = M.y(mapValue(selectedHz()), camera);
+    const ticks = M.ticks(camera, unit, state.a, selectedHz(), height);
+    const guides = ticks
+      .map(
+        (t) =>
+          '<span class="map-rule" style="top:' +
+          t.position * 100 +
+          '%"></span>',
+      )
+      .join("");
+    const axis = ticks
+      .map(
+        (t) =>
+          '<span style="top:' + t.position * 100 + '%">' + t.label + "</span>",
+      )
+      .join("");
+    let row =
+      '<tr class="map-row" style="--lane-height:' +
+      height +
+      'px"><th scope="row" class="gutter map-axis"><div class="map-lane">' +
+      axis +
+      "</div></th>";
+    for (const s of ss) {
+      const marks = [];
+      for (let n = 1; n <= state.limit; n++) {
+        const f = s.f * n,
+          position = M.y(mapValue(f), camera);
+        if (position >= 0 && position <= 1)
+          marks.push({
+            f,
+            position,
+            n,
+            selected: s.id === state.selected.id && n === state.selected.n,
+          });
+      }
+      row += pitchMarkLane(marks, guides, selectedY, camera, s);
+    }
+    for (const k of refs)
+      row += pitchMarkLane(
+        M.referenceMarks(k, camera, unit, state.a),
+        guides,
+        selectedY,
+        camera,
+        null,
+      );
+    mapReadout(camera, mapExtent());
+    return row + "</tr>";
+  }
+  function redrawMap() {
+    if (state.view !== "map") return;
+    const body = $("matrix").tBodies[0];
+    const restoreFocus = body.contains(document.activeElement);
+    body.innerHTML = mapRows(sources(), state.mapRefs ? state.systems : []);
+    const readout = $("inspector").querySelector(".read-hz");
+    if (readout)
+      readout.textContent = mapFrequency(selectedHz(), mapCamera()) + " Hz";
+    if (restoreFocus)
+      (
+        $("matrix").querySelector('.map-mark[aria-pressed="true"]') ||
+        $("matrix-scroll")
+      ).focus({ preventScroll: true });
+  }
+  let repaint = 0,
+    persistTimer;
+  function updateCamera(camera) {
+    const full = mapExtent();
+    state.mapCamera = camera.span >= full.span * 0.999999999 ? null : camera;
+    if (!repaint)
+      repaint = requestAnimationFrame(() => {
+        repaint = 0;
+        redrawMap();
+      });
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(save, 160);
+  }
+  function selectionZoom(span) {
+    const value = mapValue(selectedHz());
+    updateCamera(M.zoom(mapCamera(), span, value, 0.5, mapExtent(), mapUnit()));
+  }
+  function framePair() {
+    const f = selectedHz();
+    const nearest = state.sources
+      .filter((s) => s.id !== state.selected.id)
+      .map((s) => P.closest(f, s, state.limit))
+      .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta))[0];
+    if (nearest) updateCamera(M.frame(f, nearest.f, mapExtent(), mapUnit()));
+  }
+  $("zoom-in").onclick = () => selectionZoom(mapCamera().span / 2);
+  $("zoom-out").onclick = () => selectionZoom(mapCamera().span * 2);
+  $("fit-map").onclick = () => updateCamera(mapExtent());
+  $("frame-pair").onclick = framePair;
+  $("zoom-range").oninput = (e) => {
+    const full = mapExtent(),
+      fraction = Number(e.target.value) / 1000;
+    selectionZoom(full.span * (M.minSpan(mapUnit()) / full.span) ** fraction);
+  };
+  $("map-refs").onchange = (e) => {
+    state.mapRefs = e.target.checked;
+    render();
+  };
+  $("map-unit").onchange = (e) => {
+    const old = mapUnit(),
+      c = mapCamera(),
+      hadZoom = !!state.mapCamera;
+    state.mapUnit = e.target.value;
+    if (hadZoom) {
+      const lower = mapValue(Math.max(1, M.frequency(M.at(1, c), old)));
+      const upper = mapValue(Math.max(1, M.frequency(M.at(0, c), old)));
+      state.mapCamera = M.constrain(
+        (upper + lower) / 2,
+        upper - lower,
+        mapExtent(),
+        mapUnit(),
+      );
+    }
+    render();
+  };
+  // Capture on the stable table so a redraw during a drag never drops a gesture.
+  const surface = $("matrix"),
+    pointers = new Map();
+  let gesture = null,
+    skipMarkClick = false;
+  function beginGesture() {
+    const points = [...pointers.values()];
+    if (!points.length) {
+      gesture = null;
+      return;
+    }
+    const first = points[0],
+      second = points[1] || first;
+    const rect = surface.tBodies[0].getBoundingClientRect();
+    const mid = (first.y + second.y) / 2;
+    gesture = {
+      camera: mapCamera(),
+      startX: first.x,
+      startY: first.y,
+      scroll: $("matrix-scroll").scrollLeft,
+      top: rect.top,
+      height: rect.height,
+      distance: Math.max(1, Math.hypot(first.x - second.x, first.y - second.y)),
+      location: (mid - rect.top) / rect.height,
+      moved: points.length > 1,
+    };
+  }
+  surface.addEventListener("pointerdown", (e) => {
+    if (
+      state.view !== "map" ||
+      !e.target.closest(".map-lane") ||
+      e.button !== 0 ||
+      pointers.size >= 2
+    )
+      return;
+    if (!pointers.size) skipMarkClick = false;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    beginGesture();
+    if (pointers.size === 2) {
+      skipMarkClick = true;
+      for (const id of pointers.keys()) surface.setPointerCapture(id);
+    }
+  });
+  surface.addEventListener("pointermove", (e) => {
+    if (!pointers.has(e.pointerId) || !gesture) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const [first, second] = pointers.values();
+    if (
+      !second &&
+      !gesture.moved &&
+      Math.hypot(first.x - gesture.startX, first.y - gesture.startY) < 4
+    )
+      return;
+    gesture.moved = true;
+    skipMarkClick = true;
+    surface.setPointerCapture(e.pointerId);
+    let camera;
+    if (second) {
+      const ratio =
+        gesture.distance /
+        Math.max(1, Math.hypot(first.x - second.x, first.y - second.y));
+      const loc = ((first.y + second.y) / 2 - gesture.top) / gesture.height;
+      camera = M.zoom(
+        gesture.camera,
+        gesture.camera.span * ratio,
+        M.at(gesture.location, gesture.camera),
+        loc,
+        mapExtent(),
+        mapUnit(),
+      );
+    } else {
+      $("matrix-scroll").scrollLeft = gesture.scroll + gesture.startX - first.x;
+      camera = M.constrain(
+        gesture.camera.center +
+          ((first.y - gesture.startY) * gesture.camera.span) / gesture.height,
+        gesture.camera.span,
+        mapExtent(),
+        mapUnit(),
+      );
+    }
+    updateCamera(camera);
+  });
+  function endGesture(e) {
+    if (pointers.delete(e.pointerId)) beginGesture();
+  }
+  surface.addEventListener("pointerup", endGesture);
+  surface.addEventListener("pointercancel", endGesture);
+  surface.addEventListener("lostpointercapture", (e) => {
+    // Touch initially captures on the mark. Its capture loss bubbles when the table takes over.
+    if (e.target === surface) endGesture(e);
+  });
+  surface.addEventListener("pointerleave", (e) => {
+    if (!surface.hasPointerCapture(e.pointerId)) endGesture(e);
+  });
+  surface.addEventListener(
+    "click",
+    (e) => {
+      if (skipMarkClick && e.detail > 0) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        skipMarkClick = false;
+      }
+    },
+    true,
+  );
+  surface.addEventListener(
+    "wheel",
+    (e) => {
+      if (
+        state.view !== "map" ||
+        !(e.ctrlKey || e.metaKey) ||
+        !e.target.closest(".map-lane")
+      )
+        return;
+      e.preventDefault();
+      const rect = surface.tBodies[0].getBoundingClientRect(),
+        location = (e.clientY - rect.top) / rect.height,
+        camera = mapCamera();
+      const dy =
+        e.deltaY *
+        (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rect.height : 1);
+      updateCamera(
+        M.zoom(
+          camera,
+          camera.span * Math.exp(Math.max(-2, Math.min(2, dy * 0.008))),
+          M.at(location, camera),
+          location,
+          mapExtent(),
+          mapUnit(),
+        ),
+      );
+    },
+    { passive: false },
+  );
+
   function drawMatrix() {
     const ss = sources(),
       byPitch = state.view === "pitch",
-      refs = byPitch && state.refColumns ? state.systems : [];
+      byMap = state.view === "map",
+      refs = (byMap ? state.mapRefs : byPitch && state.refColumns)
+        ? state.systems
+        : [];
+    $("map-tools").hidden = !byMap;
+    $("matrix-scroll").classList.toggle("map-mode", byMap);
+    $("matrix-scroll").tabIndex = byMap ? 0 : -1;
     const matrix = $("matrix");
     matrix.style.minWidth =
       ss.length * (window.innerWidth < 600 ? 122 : 153) +
@@ -528,7 +962,13 @@
     }
     html +=
       '<tr><th scope="col" class="gutter axis-head">' +
-      (byPitch ? "Pitch<br>band" : "Partial") +
+      (byMap
+        ? mapUnit() === "hz"
+          ? "Hz"
+          : "Pitch"
+        : byPitch
+          ? "Pitch<br>band"
+          : "Partial") +
       "</th>";
     ss.forEach((s) => {
       html +=
@@ -570,7 +1010,8 @@
     function sourceTd(s, inner) {
       return '<td style="' + colors(s.color) + '">' + inner + "</td>";
     }
-    if (!byPitch) {
+    if (byMap) html += mapRows(ss, refs);
+    else if (!byPitch) {
       for (let n = 1; n <= state.limit; n++) {
         html +=
           '<tr><th scope="row" class="gutter ' +
@@ -636,10 +1077,12 @@
       }
     }
     matrix.innerHTML = html + "</tbody>";
-    $("view-note").textContent = byPitch
-      ? "Rows align by nearest 12-EDO note."
-      : "P01 is the sounding fundamental.";
-    $("by-partial").setAttribute("aria-pressed", !byPitch);
+    if (!byMap)
+      $("view-note").textContent = byPitch
+        ? "Rows align by nearest 12-EDO note."
+        : "P01 is the sounding fundamental.";
+    $("by-map").setAttribute("aria-pressed", byMap);
+    $("by-partial").setAttribute("aria-pressed", !byPitch && !byMap);
     $("by-pitch").setAttribute("aria-pressed", byPitch);
     $("groups").setAttribute("aria-pressed", state.grouped);
     $("groups").querySelector("span").textContent = state.grouped
@@ -712,7 +1155,7 @@
       '</span><div class="read-pitch"><strong>' +
       noteName(f) +
       '</strong><span class="read-hz">' +
-      fmt(f) +
+      (state.view === "map" ? mapFrequency(f, mapCamera()) : fmt(f)) +
       ' Hz</span></div><button class="play" id="play"></button></div><div class="ins-block"><div class="ins-heading"><h3>Tuning comparison</h3><small>A4 = ' +
       state.a +
       "</small></div>" +
@@ -722,7 +1165,14 @@
       "</div>";
     refreshPlay();
   }
+  let lastMapSelection =
+    state.selected.id + "/" + state.selected.n + "/" + selectedHz();
   function render() {
+    const key = state.selected.id + "/" + state.selected.n + "/" + selectedHz();
+    if (key !== lastMapSelection) {
+      showSelection();
+      lastMapSelection = key;
+    }
     const ss = sources();
     $("legend").innerHTML = ss
       .map(
@@ -752,9 +1202,12 @@
   function choose(id, n, focus = false) {
     if (!getSource(id)) return;
     state.selected = { id, n: Math.max(1, Math.min(state.limit, n)) };
+    showSelection();
     render();
     if (focus) {
-      const target = $("matrix").querySelector('.cell[aria-pressed="true"]');
+      const target = $("matrix").querySelector(
+        '[data-src][aria-pressed="true"]',
+      );
       target?.focus({ preventScroll: true });
       target?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }
@@ -989,10 +1442,18 @@
   };
   function switchView(view) {
     state.view = view;
+    const hash = Object.keys(linkedViews).find(
+      (key) => linkedViews[key] === view,
+    );
+    if (location.hash && hash) history.replaceState(null, "", hash);
     $("matrix-scroll").scrollTop = 0;
     $("matrix-scroll").scrollLeft = 0;
     render();
   }
+  window.addEventListener("hashchange", () => {
+    if (linkedViews[location.hash]) switchView(linkedViews[location.hash]);
+  });
+  $("by-map").onclick = () => switchView("map");
   $("by-pitch").onclick = () => switchView("pitch");
   $("by-partial").onclick = () => switchView("partial");
   function chooseClicked(e) {
@@ -1001,7 +1462,7 @@
       choose(b.dataset.src, Number(b.dataset.n));
       if (e.currentTarget === $("matrix"))
         $("matrix")
-          .querySelector('.cell[aria-pressed="true"]')
+          .querySelector('[data-src][aria-pressed="true"]')
           ?.focus({ preventScroll: true });
       return;
     }
@@ -1065,16 +1526,40 @@
       e.ctrlKey ||
       e.altKey ||
       e.metaKey ||
-      e.shiftKey ||
+      (e.shiftKey && e.key !== "+") ||
       e.target.closest("input,select,textarea,[contenteditable=true]")
     )
       return;
     if (
       e.target.closest("button") &&
-      !e.target.closest(".cell[data-src]") &&
+      !e.target.closest("[data-src]") &&
       e.code === "Space"
     )
       return;
+    if (state.view === "map" && ["+", "=", "-"].includes(e.key)) {
+      e.preventDefault();
+      selectionZoom(mapCamera().span * (e.key === "-" ? 2 : 0.5));
+      return;
+    }
+    if (
+      state.view === "map" &&
+      e.target.closest("#matrix-scroll") &&
+      ["PageUp", "PageDown", "Home"].includes(e.key)
+    ) {
+      e.preventDefault();
+      const c = mapCamera();
+      updateCamera(
+        e.key === "Home"
+          ? mapExtent()
+          : M.constrain(
+              c.center + (e.key === "PageUp" ? 1 : -1) * c.span * 0.8,
+              c.span,
+              mapExtent(),
+              mapUnit(),
+            ),
+      );
+      return;
+    }
     let { id, n } = state.selected;
     if (e.key === "ArrowUp") n++;
     else if (e.key === "ArrowDown") n--;
@@ -1087,13 +1572,16 @@
         return;
       }
       id = ss[j].id;
-      if (state.view === "pitch")
+      if (state.view === "pitch" || state.view === "map")
         n = P.closest(selectedHz(), ss[j], state.limit).n;
     } else if (e.code !== "Space") return;
     e.preventDefault();
     choose(id, n, true);
   });
-  window.addEventListener("resize", drawChart);
+  window.addEventListener("resize", () => {
+    drawChart();
+    redrawMap();
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) clearAudio();
   });

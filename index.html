@@ -6,9 +6,10 @@
     <meta name="theme-color" content="#163d34" />
     <title>PolySpectra · Spectrum workspace</title>
     <link rel="icon" href="./mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./style.css" />
-    <script defer src="./pitch.js"></script>
-    <script defer src="./app.js"></script>
+    <link rel="stylesheet" href="./style.css?v=pitch-map" />
+    <script defer src="./pitch.js?v=pitch-map"></script>
+    <script defer src="./pitch-map.js"></script>
+    <script defer src="./app.js?v=pitch-map"></script>
   </head>
   <body>
     <header class="topbar">
@@ -61,7 +62,8 @@
               <span id="count" class="count"></span>
             </div>
             <div class="matrix-actions">
-              <div class="segmented" aria-label="Row arrangement">
+              <div class="segmented" aria-label="Spectrum view">
+                <button id="by-map">Pitch map</button>
                 <button id="by-partial">By partial</button
                 ><button id="by-pitch">By pitch</button>
               </div>
@@ -73,6 +75,41 @@
                 <option value="32">32 partials</option>
               </select>
             </div>
+          </div>
+          <div id="map-tools" class="map-tools" hidden>
+            <label for="map-unit" class="sr">Vertical spacing</label>
+            <select id="map-unit">
+              <option value="cents">Pitch · cents</option>
+              <option value="hz">Frequency · Hz</option>
+            </select>
+            <div class="map-zoom">
+              <button id="zoom-out" aria-label="Zoom out" title="Zoom out">
+                −
+              </button>
+              <input
+                id="zoom-range"
+                type="range"
+                min="0"
+                max="1000"
+                step="1"
+                value="0"
+                aria-label="Pitch map magnification"
+              />
+              <button id="zoom-in" aria-label="Zoom in" title="Zoom in">
+                +
+              </button>
+              <output id="zoom-readout" for="zoom-range"></output>
+            </div>
+            <button id="fit-map">Fit all</button
+            ><button
+              id="frame-pair"
+              title="Frame the selected partial and the nearest partial of another source"
+            >
+              Closest pair
+            </button>
+            <label class="map-refs"
+              ><input type="checkbox" id="map-refs" /> Tuning lanes</label
+            >
           </div>
           <div
             id="matrix-scroll"
@@ -216,6 +253,13 @@
       <p>
         Select a cell or a peak to hear its exact frequency. Use the inspector
         to play a nearby partial together with it.
+      </p>
+      <p>
+        In Pitch map, equal vertical distances represent equal musical intervals
+        in cents, or equal frequency differences in Hz. Select a mark and use +
+        or − to zoom around it. Closest pair frames the nearest partial from
+        another source. Drag to pan, or pinch or Ctrl/⌘-scroll to zoom at a
+        point.
       </p>
       <p>
         Drag a column header to reorder it, or use the move controls in its

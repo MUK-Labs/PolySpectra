@@ -90,5 +90,5 @@ globalThis.AtlasPitch = (() => {
         : ns[1];
     return { id: source.id, n, f: source.f * n, delta: cents(source.f * n, f) };
   }
-  return { systems, cents, note, pitch, nearest, tonesInBand, closest, edoHz };
+  return { systems, cents, note, pitch, reference, nearest, tonesInBand, closest, edoHz };
 })();
