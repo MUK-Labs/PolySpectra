@@ -1,10 +1,18 @@
 "use strict";
 globalThis.PolyWorkspace = (() => {
-  const partial = (n) => Number.isInteger(n) && n >= 1 && n <= 32;
+  const P = globalThis.AtlasPitch;
+  const bendRanges = [1, 2, 3, 12, 24, 48];
+  const limits = [8, 12, 16, 24, 32, 48, 88];
+  const partial = (n) => Number.isInteger(n) && n >= 1 && n <= 88;
   const validHz = (f) => Number.isFinite(f) && f >= 8 && f <= 4000;
   // Each follower has one independent tuning constraint. Resolve roots first so a
   // branch or chain is computed from full-precision fundamentals in one pass.
   function resolve(sources, links) {
+    for (const s of sources)
+      if (s.scale !== undefined && !P.validScale(s.scale))
+        throw Error(
+          "Use 1–120 divisions, a first step from −96 to 96 and an offset within ±2400 cents. Custom scales must ascend from 0 to below 1200 cents.",
+        );
     const byId = new Map(sources.map((s) => [s.id, s]));
     const incoming = new Set(),
       children = new Map(),
@@ -34,7 +42,10 @@ globalThis.PolyWorkspace = (() => {
         );
       frequencies.set(id, f);
       for (const edge of children.get(id) || []) {
-        frequencies.set(edge.to, (f * edge.fromN) / edge.toN);
+        frequencies.set(
+          edge.to,
+          (f * P.ratio(src, edge.fromN)) / P.ratio(byId.get(edge.to), edge.toN),
+        );
         queue.push(edge.to);
       }
     }
@@ -56,8 +67,18 @@ globalThis.PolyWorkspace = (() => {
     for (const s of state.sources)
       p.append(
         "src",
-        JSON.stringify([s.name, s.f, s.group, s.color, s.kind || "source"]),
+        JSON.stringify([
+          s.name,
+          s.f,
+          s.group,
+          s.color,
+          s.kind || "source",
+          ...(s.scale ? [s.scale] : []),
+        ]),
       );
+    const channels = state.sources.map((s, i) => s.channel ?? autoChannel(i));
+    if (channels.some((ch, i) => ch !== autoChannel(i)))
+      p.set("channels", channels.join(","));
     for (const l of state.links)
       p.append(
         "link",
@@ -75,6 +96,8 @@ globalThis.PolyWorkspace = (() => {
     p.set("selected", indexes.get(state.selected.id) + "." + state.selected.n);
     if (state.fullscreen) p.set("fullscreen", "1");
     if (state.grouped) p.set("grouped", "1");
+    if (state.bendRange && state.bendRange !== 2)
+      p.set("bend", state.bendRange);
     if (state.muted) p.set("sound", "off");
     if (state.mapRefs) p.set("lanes", "1");
     if (!state.refColumns) p.set("refcols", "0");
@@ -86,7 +109,9 @@ globalThis.PolyWorkspace = (() => {
   function fromURL(href, defaults) {
     const p = new URL(href).searchParams;
     if (!["setup", "a4", "fullscreen", "src", "link"].some((k) => p.has(k)))
-      return null;
+      return p.get("example") === "quarter-tone-pianos"
+        ? pianoExample(defaults)
+        : null;
     const bad = () => {
       throw Error(
         "This setup URL contains an unsupported or incomplete setting.",
@@ -98,8 +123,9 @@ globalThis.PolyWorkspace = (() => {
     if (rows.length)
       s.sources = rows.map((row, i) => {
         const a = JSON.parse(row);
-        if (!Array.isArray(a) || a.length !== 5) bad();
-        const [name, f, group, color, kind] = a;
+        if (!Array.isArray(a) || (a.length !== 5 && a.length !== 6)) bad();
+        const [name, f, group, color, kind, scale] = a;
+        if (a.length === 6 && !P.validScale(scale)) bad();
         if (
           typeof name !== "string" ||
           !name.trim() ||
@@ -112,8 +138,22 @@ globalThis.PolyWorkspace = (() => {
           !["strings", "brass", "source"].includes(kind)
         )
           bad();
-        return { id: "s" + (i + 1), name, f, group, color, kind };
+        return {
+          id: "s" + (i + 1),
+          name,
+          f,
+          group,
+          color,
+          kind,
+          ...(scale ? { scale } : {}),
+        };
       });
+    if (p.has("channels")) {
+      const channels = p.get("channels").split(",").map(Number);
+      if (channels.length !== s.sources.length || !validChannels(channels))
+        bad();
+      s.sources.forEach((src, i) => (src.channel = channels[i]));
+    }
     s.a = p.has("a4") ? Number(p.get("a4")) : s.a;
     s.limit = p.has("partials") ? Number(p.get("partials")) : s.limit;
     s.view = p.get("view") ?? s.view;
@@ -124,7 +164,7 @@ globalThis.PolyWorkspace = (() => {
       !Number.isFinite(s.a) ||
       s.a < 300 ||
       s.a > 600 ||
-      ![8, 12, 16, 24, 32].includes(s.limit) ||
+      !limits.includes(s.limit) ||
       !["partial", "pitch", "map"].includes(s.view) ||
       !s.systems.every((k) => Object.hasOwn(globalThis.AtlasPitch.systems, k))
     )
@@ -156,6 +196,8 @@ globalThis.PolyWorkspace = (() => {
     if (s.selected.n > s.limit) bad();
     s.fullscreen = p.get("fullscreen") === "1";
     s.grouped = p.get("grouped") === "1";
+    s.bendRange = p.has("bend") ? Number(p.get("bend")) : 2;
+    if (!bendRanges.includes(s.bendRange)) bad();
     s.muted = p.get("sound") === "off";
     s.mapRefs = p.get("lanes") === "1";
     s.refColumns = p.get("refcols") !== "0";
@@ -168,5 +210,41 @@ globalThis.PolyWorkspace = (() => {
     }
     return s;
   }
-  return { resolve, shareURL, fromURL };
+  const autoChannel = (i) => (i < 16 ? i + 1 : 0);
+  function validChannels(channels) {
+    const active = channels.filter(Boolean);
+    return (
+      channels.every((c) => Number.isInteger(c) && c >= 0 && c <= 16) &&
+      new Set(active).size === active.length
+    );
+  }
+  function pianoExample(defaults) {
+    const setup = structuredClone(defaults);
+    setup.sources = [0, 50].map((offset, i) => ({
+      id: "piano" + (i + 1),
+      name: i ? "Piano II" : "Piano I",
+      group: "Pianos",
+      f: 440,
+      kind: "source",
+      color: i ? "#e49865" : "#7ea8d7",
+      scale: { divisions: 12, start: -9, offset },
+    }));
+    return {
+      ...setup,
+      limit: 24,
+      selected: { id: "piano1", n: 10 },
+      view: "map",
+      links: [],
+      systems: ["12"],
+    };
+  }
+  return {
+    resolve,
+    shareURL,
+    fromURL,
+    limits,
+    bendRanges,
+    autoChannel,
+    validChannels,
+  };
 })();

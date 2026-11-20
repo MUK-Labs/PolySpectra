@@ -1458,3 +1458,46 @@ main {
     margin-right: auto;
   }
 }
+
+#source-dialog [hidden],
+#midi-dialog [hidden] {
+  display: none;
+}
+#scale-fields,
+#midi-dialog fieldset {
+  margin: 12px 0;
+}
+#scale-fields .form-row {
+  margin-top: 8px;
+}
+.example-link {
+  display: inline-block;
+  margin: 8px 0;
+  color: #225744;
+  font-size: 0.85rem;
+}
+#midi-routes label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+#midi-routes select {
+  margin-left: auto;
+  width: 7em;
+}
+#midi-dialog select {
+  max-width: 100%;
+}
+#midi-dialog .form-row > label {
+  min-width: 0;
+}
+#frequency-label {
+  color: inherit;
+}
+
+.read-deviation {
+  display: block;
+  font: 500 12px/1.3 var(--mono, monospace);
+  color: #456055;
+}

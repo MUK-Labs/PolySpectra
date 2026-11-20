@@ -6,11 +6,12 @@
     <meta name="theme-color" content="#163d34" />
     <title>PolySpectra · Spectrum workspace</title>
     <link rel="icon" href="./mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./style.css?v=partial-links" />
-    <script defer src="./pitch.js?v=partial-links"></script>
-    <script defer src="./pitch-map.js"></script>
-    <script defer src="./workspace.js"></script>
-    <script defer src="./app.js?v=partial-links"></script>
+    <link rel="stylesheet" href="./style.css?v=tempered-midi" />
+    <script defer src="./pitch.js?v=tempered-midi"></script>
+    <script defer src="./pitch-map.js?v=tempered-midi"></script>
+    <script defer src="./workspace.js?v=tempered-midi"></script>
+    <script defer src="./midi.js?v=tempered-midi"></script>
+    <script defer src="./app.js?v=tempered-midi"></script>
   </head>
   <body>
     <main>
@@ -22,7 +23,7 @@
         </div>
         <div
           id="chart"
-          aria-label="Interactive harmonic frequencies on a logarithmic axis"
+          aria-label="Interactive source pitches on a logarithmic axis"
         ></div>
         <div class="chart-foot">
           <span>Frequency (Hz)</span><span>Logarithmic scale</span>
@@ -51,10 +52,19 @@
             <option value="16">16 partials</option>
             <option value="24">24 partials</option>
             <option value="32">32 partials</option>
+            <option value="48">48 partials</option>
+            <option value="88">88 partials</option>
           </select>
         </div>
         <nav class="utility-tools" aria-label="Workspace tools">
-          <button id="sound" class="quiet"></button>
+          <button id="midi" title="MIDI output and source channels">
+            MIDI out
+          </button>
+          <button
+            id="sound"
+            title="Toggle browser sine tones"
+            class="quiet"
+          ></button>
           <button
             id="help"
             class="quiet"
@@ -123,7 +133,7 @@
             id="matrix-scroll"
             class="matrix-scroll"
             role="region"
-            aria-label="Playable partial matrix"
+            aria-label="Playable pitch matrix"
           >
             <div id="sheet-surface">
               <table id="matrix"></table>
@@ -140,7 +150,7 @@
         <aside
           id="inspector"
           class="panel"
-          aria-label="Partial inspector"
+          aria-label="Pitch inspector"
         ></aside>
       </div>
       <footer>
@@ -151,7 +161,7 @@
             height="20"
             alt=""
           />PolySpectra</span
-        ><span><i data-icon="cursor"></i>Click a partial to hear it</span
+        ><span><i data-icon="cursor"></i>Click a pitch to hear it</span
         ><span><kbd>↑</kbd><kbd>↓</kbd> Move through a series</span
         ><span id="save-status"></span>
       </footer>
@@ -167,6 +177,8 @@
         <label
           >Starting point<select id="preset">
             <option value="custom">Custom source</option>
+            <option value="piano">Piano · 12-EDO</option>
+            <option value="pianoUp">Piano · 12-EDO +50¢</option>
             <option value="cello">Cello · open C</option>
             <option value="horn">Horn in F · open tubing</option>
             <option value="violin">Violin · open G</option>
@@ -176,11 +188,18 @@
           </select></label
         >
         <label
+          >Pitch series<select id="series">
+            <option value="harmonic">Harmonic series</option>
+            <option value="edo">Equal temperament (EDO)</option>
+            <option value="custom">Custom octave in cents</option>
+          </select></label
+        >
+        <label
           >Source name<input id="source-name" required maxlength="40"
         /></label>
         <div class="form-row">
           <label
-            >Sounding fundamental <span>(Hz)</span
+            ><span id="frequency-label">Sounding fundamental (Hz)</span
             ><input
               type="number"
               id="frequency"
@@ -196,6 +215,45 @@
               placeholder="e.g. Strings"
           /></label>
         </div>
+        <fieldset id="scale-fields" hidden>
+          <legend>Instrument tuning</legend>
+          <label id="divisions-label"
+            >Equal divisions per octave<input
+              id="divisions"
+              type="number"
+              min="1"
+              max="120"
+              step="1"
+              required
+          /></label>
+          <label id="cents-label" hidden
+            >Degrees in cents<input
+              id="scale-cents"
+              maxlength="1800"
+              placeholder="0, 90, 204, 294, …"
+          /></label>
+          <div class="form-row">
+            <label
+              >Offset (cents)<input
+                id="scale-offset"
+                type="number"
+                min="-2400"
+                max="2400"
+                step="any"
+                required
+            /></label>
+            <label
+              >First displayed step<input
+                id="scale-start"
+                type="number"
+                min="-96"
+                max="96"
+                step="1"
+                required
+            /></label>
+          </div>
+          <p class="form-note" id="scale-hint"></p>
+        </fieldset>
         <p class="form-note" id="frequency-note" role="status"></p>
         <datalist id="group-names"></datalist>
         <fieldset>
@@ -203,11 +261,54 @@
           <div id="colors"></div>
         </fieldset>
         <div id="arrange"></div>
+        <a href="?example=quarter-tone-pianos" class="example-link"
+          >Open the quarter-tone piano pair ↗</a
+        >
         <div class="dialog-actions">
           <button type="button" class="cancel">Cancel</button
           ><button class="primary" id="source-save">Add source</button>
         </div>
       </form>
+    </dialog>
+    <dialog id="midi-dialog" aria-labelledby="midi-title">
+      <div class="dialog-title">
+        <h2 id="midi-title">MIDI output</h2>
+        <button class="icon close" aria-label="Close">
+          <i data-icon="x"></i>
+        </button>
+      </div>
+      <p class="form-note">
+        Choose a hardware or virtual MIDI port. Assign your receiving
+        instruments to the channels below.
+      </p>
+      <button id="midi-connect" class="primary">Connect MIDI</button>
+      <p id="midi-status" class="form-note" role="status"></p>
+      <div class="form-row">
+        <label
+          >Output port<select id="midi-port">
+            <option value="">Off</option>
+          </select></label
+        >
+        <label
+          >Pitch-bend range<select id="bend-range">
+            <option value="1">±1 semitone</option>
+            <option value="2" selected>±2 semitones</option>
+            <option value="3">±3 semitones</option>
+            <option value="12">±12 semitones</option>
+            <option value="24">±24 semitones</option>
+            <option value="48">±48 semitones</option>
+          </select></label
+        >
+      </div>
+      <p class="form-note">
+        Match this range in your virtual instruments. Turn off the toolbar’s
+        Sound button to hear only MIDI playback.
+      </p>
+      <fieldset>
+        <legend>Source channels</legend>
+        <div id="midi-routes"></div>
+      </fieldset>
+      <div class="dialog-actions"><button class="close">Done</button></div>
     </dialog>
     <dialog id="tuning-dialog" aria-label="Tuning references">
       <form id="tuning-form">
@@ -256,7 +357,7 @@
         <p class="link-origin" id="link-origin"></p>
         <div class="form-row">
           <label>Destination source<select id="link-to"></select></label
-          ><label>Destination partial<select id="link-n"></select></label>
+          ><label>Destination pitch<select id="link-n"></select></label>
         </div>
         <p id="link-preview" aria-live="polite"></p>
         <div class="dialog-actions">
@@ -290,7 +391,7 @@
       </div>
       <dl class="help-list">
         <div>
-          <dt>Higher / lower partial</dt>
+          <dt>Higher / lower pitch</dt>
           <dd><kbd>↑</kbd> <kbd>↓</kbd></dd>
         </div>
         <div>
@@ -307,8 +408,8 @@
         </div>
       </dl>
       <p>
-        Select a cell or a peak to hear its exact frequency. Use the inspector
-        to play a nearby partial together with it.
+        Select a cell or a pitch mark to hear its exact frequency. Use the
+        inspector to play a nearby pitch together with it.
       </p>
       <p>
         In Pitch map, equal vertical distances represent equal musical intervals
@@ -333,8 +434,10 @@
         linked partials. Unlink keeps the destination at its current frequency.
       </p>
       <p class="form-note">
-        Each source uses the ideal harmonic series, fₙ = n × f₁. Peak heights
-        are illustrative. All playback uses sine tones at sounding pitch.
+        Harmonic sources use fₙ = n × f₁. Tempered instruments repeat their
+        scale each octave. Peak heights are illustrative. The browser plays sine
+        tones. MIDI out sends each source’s sounding pitch to its assigned
+        channel.
       </p>
     </dialog>
     <div id="announce" class="sr" role="status" aria-live="polite"></div>

@@ -1,6 +1,6 @@
 # PolySpectra
 
-A playable workbench for comparing the harmonic series of strings, brass instruments and other periodic sound sources. [Open PolySpectra](https://adrianartacho.github.io/PolySpectra/).
+A playable workbench for comparing harmonic series and the playable pitches of independently tuned instruments. [Open PolySpectra](https://adrianartacho.github.io/PolySpectra/).
 
 ## Try a comparison
 
@@ -14,6 +14,18 @@ The initial workspace contains cello C2, open horn in F, and violin G3. Select t
 - **Add source** takes a sounding fundamental in Hz. Each column’s menu lets you change its name, frequency, group and color. Drag headers or use **Move left / Move right**. **Group sources** brings members of each named group together.
 - Click a matrix cell or a plot peak to hear its sine tone. Up and Down raise and lower the partial. Left and Right move to the adjacent source, keeping the partial number in partial view or seeking the closest pitch in the pitch map and pitch-band views. Space replays the selection. Escape stops playback.
 - The browser saves the workspace on this device.
+
+## Tempered instruments
+
+[Open the quarter-tone piano pair](https://adrianartacho.github.io/PolySpectra/?example=quarter-tone-pianos). Both keyboards use 12-EDO. Piano I plays A4 at 440 Hz and Piano II plays the same key at 452.89 Hz. Select Piano I’s A4 and audition either equally close key on Piano II under **Closest pitches**. The signed difference is the other instrument’s pitch minus the selected pitch, in cents.
+
+In **Add source** choose a piano preset or change **Pitch series** to **Equal temperament (EDO)** or **Custom octave in cents**. Each instrument has its own reference in Hz, cent offset and first displayed step. For 12-EDO, step 0 is the instrument’s A4. For a full piano range, set the first step to −48 and choose **88 pitches** in the toolbar. Custom octaves use ascending cent values beginning at 0, with the octave inferred at 1200. Tempered instruments can be linked to harmonic partials and to one another. Share links preserve the scale and tuning.
+
+## MIDI output
+
+Open **MIDI out → Connect MIDI**, allow access, and choose your hardware or virtual output. Set your receiving instruments to the source channels shown in the dialog. Sources start on successive free channels. Assignments stay with each instrument when you move columns. Additional sources start with MIDI off once all 16 channels are in use. Free a channel by setting its source to **Off**.
+
+The default pitch-bend range is ±2 semitones. Match the instrument’s range to the setting in PolySpectra. It sends pitch-bend sensitivity (RPN 0), a 14-bit bend and a note-on, followed by note-off and a centered bend. Closest-pitch comparisons play the two source channels together. Reference lanes use the browser sine tone. **Sound off** mutes the browser while keeping MIDI available. Source channel assignments and the bend range travel with the setup URL. Output-device access is selected on the receiving computer.
 
 ## Link partials
 

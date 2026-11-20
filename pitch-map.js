@@ -7,11 +7,17 @@ globalThis.PitchMap = (() => {
   const frequency = (v, unit) => (unit === "hz" ? v : 2 ** (v / 1200));
   const minSpan = (unit) => (unit === "hz" ? 0.00001 : 0.01);
   function extent(sources, limit, unit) {
-    const first = coordinate(Math.min(...sources.map((s) => s.f)), unit);
-    const last = coordinate(Math.max(...sources.map((s) => s.f)) * limit, unit);
+    const first = coordinate(
+      Math.min(...sources.map((s) => P.frequency(s, 1))),
+      unit,
+    );
+    const last = coordinate(
+      Math.max(...sources.map((s) => P.frequency(s, limit))),
+      unit,
+    );
     const pad = (last - first) * 0.055;
     const lo = unit === "hz" ? Math.max(0, first - pad) : first - pad;
-    const hi = last + pad;
+    const hi = Math.max(last + pad, lo + minSpan(unit));
     return { center: (hi + lo) / 2, span: hi - lo };
   }
   function constrain(center, span, full, unit) {
@@ -46,7 +52,10 @@ globalThis.PitchMap = (() => {
     return ([1, 2, 5, 10].find((n) => n * base >= target) || 10) * base;
   }
   function ticks(camera, unit, a, selected, height) {
-    const target = camera.span / Math.max(3, Math.floor(height / 46));
+    const target = Math.max(
+      camera.span / Math.max(3, Math.floor(height / 46)),
+      Math.abs(camera.center) * Number.EPSILON * 2,
+    );
     const named = unit === "cents" && target >= 50;
     const noteSteps = [100, 200, 300, 600, 1200, 2400, 4800];
     const step = named

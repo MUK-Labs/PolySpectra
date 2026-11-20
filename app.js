@@ -51,6 +51,22 @@
     "#beb263",
   ];
   const presets = {
+    piano: {
+      name: "Piano",
+      midi: 69,
+      group: "Pianos",
+      kind: "source",
+      color: palette[3],
+      scale: { divisions: 12, start: -9, offset: 0 },
+    },
+    pianoUp: {
+      name: "Piano +50¢",
+      midi: 69,
+      group: "Pianos",
+      kind: "source",
+      color: palette[1],
+      scale: { divisions: 12, start: -9, offset: 50 },
+    },
     cello: {
       name: "Cello",
       midi: 36,
@@ -116,7 +132,7 @@
     selected: { id: "cello", n: 3 },
   };
   const storageKey = "polyspectra.workspace.v1";
-  const limits = [8, 12, 16, 24, 32];
+  const limits = W.limits;
   function readWorkspace() {
     try {
       const s = JSON.parse(localStorage.getItem(storageKey));
@@ -182,6 +198,23 @@
     return readWorkspace();
   }
   const state = initialState();
+  const channels = state.sources.map((s, i) => s.channel ?? W.autoChannel(i));
+  const validRoutes = W.validChannels(channels);
+  state.sources.forEach(
+    (s, i) => (s.channel = validRoutes ? channels[i] : W.autoChannel(i)),
+  );
+  const midi = new globalThis.AtlasMIDI.Output();
+  state.bendRange = W.bendRanges.includes(state.bendRange)
+    ? state.bendRange
+    : 2;
+  midi.range = state.bendRange;
+  $("bend-range").value = state.bendRange;
+  const exampleURL =
+    new URL(location.href).search === "?example=quarter-tone-pianos"
+      ? location.href
+      : null;
+  const exampleSetup = exampleURL ? W.shareURL(state, location.href) : null;
+  const hasScale = () => state.sources.some((s) => s.scale);
   const linkedViews = {
     "#pitch-map": "map",
     "#by-partial": "partial",
@@ -218,8 +251,11 @@
   const pnum = (n) => "P" + String(n).padStart(2, "0");
   const getSource = (id) => state.sources.find((s) => s.id === id);
   const selected = () => getSource(state.selected.id);
-  const selectedHz = () => selected().f * state.selected.n;
+  const selectedHz = () => P.frequency(selected(), state.selected.n);
   const noteName = (f) => P.note(P.pitch(f, state.a));
+  const signed = (v) => (v > 0 ? "+" : "") + v;
+  const scaleName = (t) =>
+    t.cents ? t.divisions + "-step scale" : t.divisions + "-EDO";
   function colors(c) {
     return (
       "--c:" +
@@ -240,7 +276,8 @@
     try {
       if (sharedSession) {
         const url = W.shareURL(state, location.href);
-        if (location.href !== url) history.replaceState(null, "", url);
+        const address = url === exampleSetup ? exampleURL : url;
+        if (location.href !== address) history.replaceState(null, "", address);
         $("save-status").textContent = "Setup saved in URL";
         return;
       }
@@ -263,9 +300,12 @@
     voices = [],
     playing = false,
     audioSeq = 0,
+    midiTimer,
     endTimer;
   function clearAudio() {
     audioSeq++;
+    clearTimeout(midiTimer);
+    midi.stop();
     clearTimeout(endTimer);
     for (const v of voices) {
       try {
@@ -279,10 +319,41 @@
     playing = false;
     refreshPlay();
   }
-  async function play(freqs, duration = 1.3) {
+  async function play(freqs, duration = 1.3, ids = []) {
     clearAudio();
+    if (midi.port) {
+      try {
+        ids.forEach((id, i) => {
+          const source = getSource(id);
+          if (source?.channel && !midi.start(source.channel, freqs[i]))
+            announce(
+              "This frequency is outside the configured MIDI pitch range.",
+              true,
+            );
+        });
+        if (midi.active.size) {
+          playing = true;
+          refreshPlay();
+          midiTimer = setTimeout(() => {
+            midi.stop();
+            if (!voices.length) {
+              playing = false;
+              refreshPlay();
+            }
+          }, duration * 1000);
+        }
+      } catch {
+        midi.route(null, midi.range);
+        refreshMIDIPorts();
+        announce("MIDI output disconnected.", true);
+      }
+    }
     if (state.muted) {
-      announce("Sound is off. Turn it on in the toolbar.", true);
+      if (!playing)
+        announce(
+          "Browser sound is off. Turn it on or route this source in MIDI out.",
+          true,
+        );
       return;
     }
     const seq = audioSeq;
@@ -296,7 +367,7 @@
         )
       ) {
         announce(
-          "This pitch is outside the 20 Hz–20 kHz playback range.",
+          "This pitch is outside the browser’s 20 Hz–20 kHz playback range.",
           true,
         );
         return;
@@ -334,10 +405,7 @@
         duration * 1000 + 30,
       );
     } catch {
-      announce(
-        "Audio could not start on this device. Tap Play partial to retry.",
-        true,
-      );
+      announce("Browser audio could not start on this device.", true);
     }
   }
   function refreshPlay() {
@@ -345,15 +413,21 @@
     if (button)
       button.innerHTML =
         icon(playing ? "stop" : "play") +
-        (playing ? "Stop sound" : "Play partial");
+        (playing
+          ? "Stop sound"
+          : selected().scale
+            ? "Play pitch"
+            : "Play partial");
   }
   function drawChart() {
     const box = $("chart"),
       w = Math.max(200, box.clientWidth),
       h = box.clientHeight,
       pad = 12;
-    const lo = Math.min(...state.sources.map((s) => s.f)) / 1.21,
-      hi = Math.max(...state.sources.map((s) => s.f * state.limit)) * 1.12;
+    const lo = Math.min(...state.sources.map((s) => P.frequency(s, 1))) / 1.21,
+      hi =
+        Math.max(...state.sources.map((s) => P.frequency(s, state.limit))) *
+        1.12;
     const pos = (f) =>
       pad + ((w - 2 * pad) * Math.log(f / lo)) / Math.log(hi / lo);
     const base = h - 20,
@@ -365,7 +439,7 @@
       w +
       " " +
       h +
-      '" role="img" aria-label="Harmonic peaks by sounding frequency"><title>Ideal harmonic peaks. Heights decrease with partial number for legibility.</title><defs>';
+      '" role="img" aria-label="Source pitches by sounding frequency"><title>Harmonics appear as peaks. Tempered pitches appear as vertical ticks.</title><defs>';
     state.sources.forEach((s, i) => {
       svg +=
         '<linearGradient id="fill' +
@@ -423,43 +497,46 @@
     state.sources.forEach((s, i) => {
       let d = "M" + pad + " " + base;
       for (let n = 1; n <= state.limit; n++) {
-        const x = pos(s.f * n),
-          y = base - (base - top) / n ** 0.32,
+        const x = pos(P.frequency(s, n)),
+          y = base - (base - top) * (s.scale ? 0.68 : 1 / n ** 0.32),
           spread = Math.min(
-            (pos(s.f * (n + 1)) - x) * 0.43,
+            (pos(P.frequency(s, n + 1)) - x) * 0.43,
             Math.max(4, w * 0.016),
           );
         const l = x - spread,
           r = x + spread;
-        d +=
-          " L" +
-          l +
-          " " +
-          base +
-          " C" +
-          (x - spread * 0.23) +
-          " " +
-          (base - 1) +
-          " " +
-          (x - spread * 0.15) +
-          " " +
-          (y + 8) +
-          " " +
-          x +
-          " " +
-          y +
-          " C" +
-          (x + spread * 0.1) +
-          " " +
-          (y + 7) +
-          " " +
-          (x + spread * 0.2) +
-          " " +
-          (base - 1) +
-          " " +
-          r +
-          " " +
-          base;
+        if (s.scale) {
+          d += " M" + x + " " + base + " V" + y + " M" + x + " " + base;
+        } else
+          d +=
+            " L" +
+            l +
+            " " +
+            base +
+            " C" +
+            (x - spread * 0.23) +
+            " " +
+            (base - 1) +
+            " " +
+            (x - spread * 0.15) +
+            " " +
+            (y + 8) +
+            " " +
+            x +
+            " " +
+            y +
+            " C" +
+            (x + spread * 0.1) +
+            " " +
+            (y + 7) +
+            " " +
+            (x + spread * 0.2) +
+            " " +
+            (base - 1) +
+            " " +
+            r +
+            " " +
+            base;
         points.push({ x, y, s, n });
       }
       d += " L" + (w - pad) + " " + base;
@@ -479,7 +556,7 @@
     );
     if (active) {
       const { x, y, s, n } = active,
-        label = pnum(n) + " · " + fmt(s.f * n) + " Hz",
+        label = P.degree(s, n) + " · " + fmt(P.frequency(s, n)) + " Hz",
         lw = label.length * 6.5 + 13;
       const lx = Math.min(Math.max(1, x - lw * 0.5), w - lw - 1);
       svg +=
@@ -518,15 +595,15 @@
         '" r="8" fill="transparent" style="cursor:pointer"><title>' +
         esc(s.name) +
         " · " +
-        pnum(n) +
+        P.degree(s, n) +
         " · " +
-        fmt(s.f * n) +
+        fmt(P.frequency(s, n)) +
         " Hz</title></circle>";
     });
     box.innerHTML = svg + "</svg>";
   }
   function cell(s, n, byPitch) {
-    const f = s.f * n,
+    const f = P.frequency(s, n),
       sel = state.selected.id === s.id && state.selected.n === n;
     return (
       '<button class="cell" data-src="' +
@@ -539,15 +616,17 @@
       (sel ? 0 : -1) +
       '" aria-label="' +
       esc(s.name) +
-      ", partial " +
-      n +
+      ", " +
+      P.degree(s, n) +
       ", " +
       noteName(f) +
       ", " +
       fmt(f) +
       ' hertz"><span class="notename">' +
-      noteName(f) +
-      (byPitch ? ' <span class="which">' + pnum(n) + "</span>" : "") +
+      (s.scale ? P.degree(s, n) : noteName(f)) +
+      (byPitch && !s.scale
+        ? ' <span class="which">' + pnum(n) + "</span>"
+        : "") +
       '</span><span class="hz">' +
       fmt(f) +
       " <small>Hz</small></span></button>"
@@ -595,7 +674,10 @@
   }
   function mapReadout(camera, full) {
     const factor = full.span / camera.span,
-      fraction = Math.log(factor) / Math.log(full.span / M.minSpan(mapUnit()));
+      fraction =
+        full.span > M.minSpan(mapUnit())
+          ? Math.log(factor) / Math.log(full.span / M.minSpan(mapUnit()))
+          : 0;
     $("zoom-range").value = Math.round(fraction * 1000);
     const magnitude =
       factor.toLocaleString("en-US", {
@@ -619,7 +701,10 @@
       " in view" +
       (mapUnit() === "cents" &&
       camera.span / Math.max(3, Math.floor(mapHeight() / 46)) < 50
-        ? " · 0¢ = " + selected().name + " " + pnum(state.selected.n)
+        ? " · 0¢ = " +
+          selected().name +
+          " " +
+          P.degree(selected(), state.selected.n)
         : "") +
       " · Drag to pan · Pinch or Ctrl/⌘-scroll to zoom";
   }
@@ -651,9 +736,16 @@
       if (show) labels.push(m.position);
       const exact = mapFrequency(m.f, camera),
         info = source
-          ? source.name + " · " + pnum(m.n) + " · " + noteName(m.f)
+          ? source.name +
+            " · " +
+            P.degree(source, m.n) +
+            (source.scale ? "" : " · " + noteName(m.f))
           : m.label;
-      const caption = source ? pnum(m.n) + " " + noteName(m.f) : m.label;
+      const caption = source
+        ? source.scale
+          ? P.degree(source, m.n)
+          : pnum(m.n) + " " + noteName(m.f)
+        : m.label;
       const attrs = source
         ? 'data-src="' +
           source.id +
@@ -730,7 +822,7 @@
     for (const s of ss) {
       const marks = [];
       for (let n = 1; n <= state.limit; n++) {
-        const f = s.f * n,
+        const f = P.frequency(s, n),
           position = M.y(mapValue(f), camera);
         if (position >= 0 && position <= 1)
           marks.push({
@@ -1009,7 +1101,9 @@
           : "Pitch"
         : byPitch
           ? "Pitch<br>band"
-          : "Partial") +
+          : hasScale()
+            ? "Row"
+            : "Partial") +
       "</th>";
     ss.forEach((s) => {
       html +=
@@ -1019,21 +1113,25 @@
         colors(s.color) +
         '"><div class="head-inner"><span class="source-sign">' +
         icon(
-          s.kind === "brass"
-            ? "brass"
-            : s.kind === "strings"
-              ? "strings"
-              : "source",
+          s.scale
+            ? "keyboard"
+            : s.kind === "brass"
+              ? "brass"
+              : s.kind === "strings"
+                ? "strings"
+                : "source",
         ) +
         '</span><span class="head-text"><strong title="' +
         esc(s.name) +
         '">' +
         esc(s.name) +
         "</strong><small>" +
-        noteName(s.f) +
-        " · " +
-        fmt(s.f) +
-        ' Hz</small></span><button class="icon" data-edit="' +
+        (s.scale
+          ? scaleName(s.scale) +
+            (s.scale.offset ? " · " + signed(s.scale.offset) + "¢" : "")
+          : noteName(s.f) + " · " + fmt(s.f) + " Hz") +
+        (midi.port && s.channel ? " · Ch " + s.channel : "") +
+        '</small></span><button class="icon" data-edit="' +
         s.id +
         '" aria-label="Edit ' +
         esc(s.name) +
@@ -1058,7 +1156,7 @@
           '<tr><th scope="row" class="gutter ' +
           (state.selected.n === n ? "current-row" : "") +
           '">' +
-          pnum(n) +
+          (hasScale() ? n : pnum(n)) +
           "</th>" +
           ss.map((s) => sourceTd(s, cell(s, n, false))).join("") +
           "</tr>";
@@ -1067,7 +1165,7 @@
       const bands = new Map();
       for (const s of ss)
         for (let n = 1; n <= state.limit; n++) {
-          const midi = P.pitch(s.f * n, state.a);
+          const midi = P.pitch(P.frequency(s, n), state.a);
           if (!bands.has(midi)) bands.set(midi, new Map());
           const row = bands.get(midi);
           if (!row.has(s.id)) row.set(s.id, []);
@@ -1129,6 +1227,19 @@
     $("groups").querySelector("span").textContent = state.grouped
       ? "Grouped"
       : "Group sources";
+    const tempered = hasScale();
+    $("by-partial").textContent = tempered ? "By index" : "By partial";
+    $("matrix-title").textContent = tempered
+      ? "Pitch matrix"
+      : "Partial matrix";
+    if (tempered && !byPitch && !byMap)
+      $("view-note").textContent = "Rows follow each source’s own pitch order.";
+    for (const option of $("limit").options)
+      option.textContent = option.value + (tempered ? " pitches" : " partials");
+    $("limit").setAttribute(
+      "aria-label",
+      tempered ? "Pitches per source" : "Number of partials",
+    );
     $("limit").value = state.limit;
     $("count").textContent =
       ss.length + (ss.length === 1 ? " source" : " sources");
@@ -1136,7 +1247,7 @@
   function drawInspector() {
     const s = selected(),
       n = state.selected.n,
-      f = s.f * n;
+      f = P.frequency(s, n);
     const tuning = state.systems
       .map((k) => {
         const r = P.nearest(k, f, state.a),
@@ -1146,7 +1257,7 @@
           r.f +
           '" title="Hear both · ' +
           fmt(r.f) +
-          ' Hz reference · deviation of partial from reference"><span>' +
+          ' Hz reference · deviation from reference"><span>' +
           P.systems[k] +
           '</span><span class="degree">' +
           r.label +
@@ -1158,7 +1269,7 @@
       .join("");
     const near = state.sources
       .filter((o) => o.id !== s.id)
-      .map((o) => P.closest(f, o, state.limit))
+      .flatMap((o) => P.matches(f, o, state.limit))
       .sort((a, b) => Math.abs(a.delta) - Math.abs(b.delta));
     const matches = near
       .map((m) => {
@@ -1166,6 +1277,8 @@
         return (
           '<button class="match" data-pair="' +
           m.f +
+          '" data-pair-src="' +
+          o.id +
           '" title="Hear both · ' +
           esc(o.name) +
           " at " +
@@ -1175,7 +1288,7 @@
           '"></span><span class="match-info">' +
           esc(o.name) +
           " · " +
-          pnum(m.n) +
+          P.degree(o, m.n) +
           '</span><span class="delta">' +
           delta(m.delta) +
           "</span>" +
@@ -1187,27 +1300,36 @@
     $("inspector").innerHTML =
       '<div class="inspector-title">' +
       icon("focus") +
-      '<h2>Partial inspector</h2></div><div class="readout"><span class="source-label"><span class="dot" style="--c:' +
+      "<h2>" +
+      (s.scale ? "Pitch inspector" : "Partial inspector") +
+      '</h2></div><div class="readout"><span class="source-label"><span class="dot" style="--c:' +
       s.color +
       '"></span>' +
       esc(s.name) +
       " · " +
-      pnum(n) +
+      P.degree(s, n) +
       '</span><div class="read-pitch"><strong>' +
       noteName(f) +
+      (s.scale
+        ? '<small class="read-deviation">' +
+          delta(P.cents(f, P.edoHz(P.pitch(f, state.a) - 69, 12, state.a))) +
+          "</small>"
+        : "") +
       '</strong><span class="read-hz">' +
       (state.view === "map" ? mapFrequency(f, mapCamera()) : fmt(f)) +
       ' Hz</span></div><button class="play" id="play"></button></div><div class="ins-block"><div class="ins-heading"><h3>Tuning comparison</h3><small>A4 = ' +
       state.a +
       "</small></div>" +
       tuning +
-      '</div><div class="ins-block"><h3>Closest partials</h3>' +
+      '</div><div class="ins-block"><h3>' +
+      (hasScale() ? "Closest pitches" : "Closest partials") +
+      "</h3>" +
       (matches || '<p class="muted">Add another source to compare.</p>') +
       "</div>";
     refreshPlay();
   }
   function linkName(id, n) {
-    return getSource(id).name + " " + pnum(n);
+    return getSource(id).name + " " + P.degree(getSource(id), n);
   }
   function incoming(id) {
     return state.links.find((l) => l.to === id);
@@ -1238,14 +1360,17 @@
     section.innerHTML =
       '<div class="ins-heading"><h3>' +
       icon("cord") +
-      ' Partial links</h3><button id="start-link" ' +
+      (hasScale() ? " Pitch links" : " Partial links") +
+      '</h3><button id="start-link" ' +
       (state.sources.length < 2
         ? 'disabled title="Add a second source to link partials"'
         : "") +
-      ">Link partial</button></div>" +
+      ">" +
+      (hasScale() ? "Link pitch" : "Link partial") +
+      "</button></div>" +
       (list
         ? "<ul>" + list + "</ul>"
-        : '<p class="form-note">Link the selected partial to a partial on another source.</p>');
+        : '<p class="form-note">Choose a pitch on another source to tune them together.</p>');
     $("inspector").append(section);
     $("link-picking").hidden = !picking;
     if (picking)
@@ -1271,8 +1396,8 @@
         target.name +
         " will follow at " +
         fmt(target.f) +
-        " Hz. The linked partials will both sound at " +
-        fmt(getSource(link.from).f * link.fromN) +
+        " Hz. Both pitches will sound at " +
+        fmt(P.frequency(getSource(link.from), link.fromN)) +
         " Hz.";
       $("tie-link").disabled = false;
     } catch (err) {
@@ -1288,30 +1413,38 @@
       "Origin · " +
       linkName(linkOrigin.id, linkOrigin.n) +
       " · " +
-      fmt(getSource(linkOrigin.id).f * linkOrigin.n) +
+      fmt(P.frequency(getSource(linkOrigin.id), linkOrigin.n)) +
       " Hz";
     $("link-to").innerHTML = options
       .map((s) => '<option value="' + s.id + '">' + esc(s.name) + "</option>")
       .join("");
     $("link-to").value =
       target?.id || (options.find((s) => !incoming(s.id)) || options[0]).id;
-    $("link-n").innerHTML = Array.from(
-      { length: state.limit },
-      (_, i) => '<option value="' + (i + 1) + '">' + pnum(i + 1) + "</option>",
-    ).join("");
+    fillLinkPitches();
     $("link-n").value =
       target?.n ??
       P.closest(
-        getSource(linkOrigin.id).f * linkOrigin.n,
+        P.frequency(getSource(linkOrigin.id), linkOrigin.n),
         getSource($("link-to").value),
         state.limit,
       ).n;
     previewLink();
     $("link-dialog").showModal();
   }
+  function fillLinkPitches() {
+    const dest = getSource($("link-to").value);
+    $("link-n").replaceChildren(
+      ...Array.from(
+        { length: state.limit },
+        (_, i) => new Option(P.degree(dest, i + 1), i + 1),
+      ),
+    );
+    $("link-title").textContent = hasScale() ? "Link pitches" : "Link partials";
+  }
   $("link-to").onchange = () => {
+    fillLinkPitches();
     $("link-n").value = P.closest(
-      getSource(linkOrigin.id).f * linkOrigin.n,
+      P.frequency(getSource(linkOrigin.id), linkOrigin.n),
       getSource($("link-to").value),
       state.limit,
     ).n;
@@ -1361,7 +1494,7 @@
     );
     state.selected = { id: l.from, n: l.fromN };
     switchView("map");
-    const f = getSource(l.from).f * l.fromN;
+    const f = P.frequency(getSource(l.from), l.fromN);
     updateCamera(M.frame(f, f, mapExtent(), mapUnit()));
     $("matrix-scroll").scrollIntoView({ block: "nearest" });
   }
@@ -1566,13 +1699,13 @@
     }
     announce(
       selected().name +
-        ", partial " +
-        state.selected.n +
+        ", " +
+        P.degree(selected(), state.selected.n) +
         ", " +
         fmt(selectedHz()) +
         " hertz",
     );
-    play([selectedHz()]);
+    play([selectedHz()], 1.3, [state.selected.id]);
   }
   let editing = null,
     formColor = palette[0],
@@ -1598,6 +1731,51 @@
       color +
       '" title="Custom color" aria-label="Custom column color">';
   }
+  function showScale(t) {
+    $("series").value = t ? (t.cents ? "custom" : "edo") : "harmonic";
+    $("divisions").value = t?.divisions ?? 12;
+    $("scale-offset").value = t?.offset ?? 0;
+    $("scale-start").value = t?.start ?? 0;
+    $("scale-cents").value = (
+      t?.cents ?? Array.from({ length: 12 }, (_, i) => 100 * i)
+    ).join(", ");
+    updateScaleForm();
+  }
+  function updateScaleForm() {
+    const kind = $("series").value,
+      off = kind === "harmonic",
+      custom = kind === "custom";
+    $("scale-fields").hidden = $("scale-fields").disabled = off;
+    $("divisions-label").hidden = $("divisions").disabled = custom;
+    $("cents-label").hidden = $("scale-cents").disabled = !custom;
+    const named = kind === "edo" && Number($("divisions").value) === 12;
+    $("frequency-label").textContent = off
+      ? "Sounding fundamental (Hz)"
+      : named
+        ? "A4 before offset (Hz)"
+        : "Step 0 before offset (Hz)";
+    $("scale-hint").textContent = custom
+      ? "Enter ascending degrees from 0 to below 1200 cents. The octave repeats automatically."
+      : named
+        ? "Step 0 is A4. Start at −48 and choose 88 pitches for the full piano keyboard."
+        : "Step 0 is the reference frequency. Negative steps extend below it.";
+  }
+  function readScale() {
+    if ($("series").value === "harmonic") return undefined;
+    const t = {
+      offset: Number($("scale-offset").value),
+      start: Number($("scale-start").value),
+      divisions: Number($("divisions").value),
+    };
+    if ($("series").value === "custom") {
+      const text = $("scale-cents").value.trim();
+      t.cents = text ? text.split(/[\s,]+/).map(Number) : [];
+      t.divisions = t.cents.length;
+    }
+    return t;
+  }
+  $("series").onchange = updateScaleForm;
+  $("divisions").oninput = updateScaleForm;
   function fillPreset(key) {
     const p = presets[key];
     if (!p) {
@@ -1605,6 +1783,7 @@
       return;
     }
     formKind = p.kind;
+    showScale(p.scale);
     $("source-name").value = p.name;
     $("group-name").value = p.group;
     if (!$("frequency").readOnly)
@@ -1620,14 +1799,15 @@
     $("preset").value = "custom";
     $("source-name").value = s?.name || "";
     $("frequency").value = s?.f || 110;
+    showScale(s?.scale);
     const driver = id && incoming(id);
     $("frequency").readOnly = !!driver;
     $("frequency-note").textContent = driver
       ? "Follows " +
         linkName(driver.from, driver.fromN) +
         " at " +
-        pnum(driver.toN) +
-        ". Unlink in Partial links to tune independently."
+        P.degree(s, driver.toN) +
+        ". Remove the link to tune independently."
       : "";
     $("group-name").value = s?.group || "";
     formKind = s?.kind || "source";
@@ -1683,6 +1863,101 @@
       .join("");
     $("tuning-dialog").showModal();
   }
+  let midiAccess;
+  function drawRoutes() {
+    $("midi-routes").replaceChildren(
+      ...sources().map((s) => {
+        const label = document.createElement("label"),
+          select = document.createElement("select");
+        label.append(document.createTextNode(s.name), select);
+        select.dataset.route = s.id;
+        select.add(new Option("Off", 0));
+        for (let ch = 1; ch <= 16; ch++) {
+          const option = new Option("Channel " + ch, ch);
+          option.disabled = state.sources.some(
+            (o) => o.id !== s.id && o.channel === ch,
+          );
+          select.add(option);
+        }
+        select.value = s.channel;
+        return label;
+      }),
+    );
+  }
+  function refreshMIDIPorts() {
+    const ports = Array.from(midiAccess?.outputs.values() ?? []).filter(
+      (p) => p.state !== "disconnected",
+    );
+    if (midi.port && !ports.includes(midi.port)) {
+      clearAudio();
+      midi.route(null, midi.range);
+    }
+    const select = $("midi-port");
+    select.replaceChildren(
+      new Option("Off", ""),
+      ...ports.map((p) => new Option(p.name || p.id, p.id)),
+    );
+    select.value = midi.port?.id ?? "";
+    select.disabled = !ports.length;
+    $("midi-connect").hidden = !!midiAccess;
+    $("midi-connect").disabled = !navigator.requestMIDIAccess;
+    $("midi-status").textContent = !navigator.requestMIDIAccess
+      ? "Web MIDI is unavailable in this browser. Open PolySpectra in a Web MIDI-capable browser to connect an output."
+      : !midiAccess
+        ? "Connect to list this device’s MIDI ports."
+        : !ports.length
+          ? "No outputs found. Open a virtual MIDI port or connect a device."
+          : midi.port
+            ? "Sending to " + (midi.port.name || "selected output") + "."
+            : "Choose an output to enable MIDI playback.";
+    $("midi").setAttribute("aria-pressed", !!midi.port);
+  }
+  $("midi").onclick = () => {
+    refreshMIDIPorts();
+    drawRoutes();
+    $("midi-dialog").showModal();
+  };
+  $("midi-connect").onclick = async () => {
+    $("midi-connect").disabled = true;
+    try {
+      midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+      midiAccess.onstatechange = () => {
+        refreshMIDIPorts();
+        drawMatrix();
+        scheduleCords();
+      };
+      refreshMIDIPorts();
+    } catch {
+      $("midi-status").textContent =
+        "MIDI access was unavailable. Check this site’s MIDI permission and try again.";
+      $("midi-connect").disabled = false;
+    }
+  };
+  function routeOutput() {
+    clearAudio();
+    const port = midiAccess?.outputs.get($("midi-port").value) ?? null;
+    state.bendRange = Number($("bend-range").value);
+    midi.route(port, state.bendRange);
+    save();
+    refreshMIDIPorts();
+    drawMatrix();
+    scheduleCords();
+  }
+  $("midi-port").onchange = $("bend-range").onchange = routeOutput;
+  $("midi-routes").onchange = (e) => {
+    const s = getSource(e.target.dataset.route),
+      ch = Number(e.target.value);
+    if (
+      !s ||
+      (ch && state.sources.some((o) => o.id !== s.id && o.channel === ch))
+    )
+      return;
+    clearAudio();
+    s.channel = ch;
+    drawRoutes();
+    render();
+  };
+  window.addEventListener("pagehide", clearAudio);
   $("add").onclick = () => sourceDialog();
   $("tuning").onclick = openTuning;
   $("help").onclick = () => $("help-dialog").showModal();
@@ -1706,6 +1981,11 @@
         );
     }
   };
+  function nextChannel() {
+    for (let ch = 1; ch <= 16; ch++)
+      if (!state.sources.some((s) => s.channel === ch)) return ch;
+    return 0;
+  }
   $("source-form").onsubmit = (e) => {
     e.preventDefault();
     const name = $("source-name").value.trim();
@@ -1714,12 +1994,15 @@
       $("source-name").reportValidity();
       return;
     }
+    const scale = readScale();
     const source = {
       id: editing || crypto.randomUUID(),
       name,
       f: Number($("frequency").value),
       group: $("group-name").value.trim(),
       kind: formKind,
+      ...(scale ? { scale } : {}),
+      channel: editing ? getSource(editing).channel : nextChannel(),
       color: formColor,
     };
     const next = editing
@@ -1869,11 +2152,15 @@
     }
     if (e.target.closest("#play")) {
       if (playing) clearAudio();
-      else play([selectedHz()]);
+      else play([selectedHz()], 1.3, [state.selected.id]);
       return;
     }
     const pair = e.target.closest("[data-pair]");
-    if (pair) play([selectedHz(), Number(pair.dataset.pair)], 6);
+    if (pair)
+      play([selectedHz(), Number(pair.dataset.pair)], 6, [
+        state.selected.id,
+        pair.dataset.pairSrc,
+      ]);
   };
   let dragId = null;
   $("matrix").ondragstart = (e) => {
