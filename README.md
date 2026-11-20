@@ -60,3 +60,5 @@ This repository serves the root of the `gh-pages` branch. Develop on `main` and 
 For a fork, choose **Settings → Pages → Deploy from a branch**, select the branch containing the app and **/(root)**, then save. [GitHub Pages publishing sources](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
 Run pitch checks with `node --test tests/*.cjs`.
+
+## [ToDo](https://trello.com/c/solmfeZ9/130-polyspectra)
