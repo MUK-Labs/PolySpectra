@@ -2,7 +2,12 @@
 (() => {
   const P = globalThis.AtlasPitch,
     $ = (id) => document.getElementById(id);
+  const W = globalThis.PolyWorkspace;
   const paths = {
+    share: "M12 15V3m-4 4 4-4 4 4M5 11v9h14v-9",
+    expand: "M3 9V3h6m6 0h6v6m0 6v6h-6m-6 0H3v-6",
+    cord: "M4 8a2 2 0 1 0 .01 0m14 2a2 2 0 1 0 .01 0M6 11c2 8 8 8 11 2",
+    unlink: "M4 7h5m6 0h5M8 18l8-12M3 5v4m18-4v4",
     wave: "M2 12h3l2-6 3 12 3-15 3 14 2-7 2 2h2",
     keyboard:
       "M3 5h18v14H3z M6 9h1m3 0h1m3 0h1m3 0h.5M6 12h1m3 0h1m3 0h1m3 0h.5M8 16h8",
@@ -67,6 +72,13 @@
       color: palette[2],
       kind: "strings",
     },
+    theremin: {
+      name: "Theremin",
+      midi: 57,
+      group: "Electronics",
+      color: palette[4],
+      kind: "source",
+    },
     bass: {
       name: "Double bass",
       midi: 28,
@@ -97,6 +109,8 @@
     mapUnit: "cents",
     mapCamera: null,
     mapRefs: false,
+    links: [],
+    fullscreen: false,
     grouped: false,
     muted: false,
     selected: { id: "cello", n: 3 },
@@ -137,6 +151,9 @@
       return {
         ...defaults,
         ...s,
+        sources: W.resolve(s.sources, s.links ?? []),
+        links: s.links ?? [],
+        fullscreen: s.fullscreen === true,
         mapUnit: s.mapUnit === "hz" ? "hz" : "cents",
         mapRefs: s.mapRefs === true,
         mapCamera:
@@ -150,7 +167,21 @@
       return defaults;
     }
   }
-  const state = readWorkspace();
+  let sharedSession = false,
+    setupError = false;
+  function initialState() {
+    try {
+      const shared = W.fromURL(location.href, defaults);
+      if (shared) {
+        sharedSession = true;
+        return shared;
+      }
+    } catch {
+      setupError = true;
+    }
+    return readWorkspace();
+  }
+  const state = initialState();
   const linkedViews = {
     "#pitch-map": "map",
     "#by-partial": "partial",
@@ -207,6 +238,12 @@
   }
   function save() {
     try {
+      if (sharedSession) {
+        const url = W.shareURL(state, location.href);
+        if (location.href !== url) history.replaceState(null, "", url);
+        $("save-status").textContent = "Setup saved in URL";
+        return;
+      }
       localStorage.setItem(storageKey, JSON.stringify(state));
       $("save-status").innerHTML = icon("check") + "Saved on this device";
     } catch {
@@ -518,7 +555,9 @@
   }
   const M = globalThis.PitchMap;
   const mapHeight = () =>
-    Math.max(320, Math.min(510, Math.round(window.innerHeight * 0.51)));
+    state.fullscreen
+      ? Math.max(330, Math.round(window.innerHeight * 0.68))
+      : Math.max(320, Math.min(510, Math.round(window.innerHeight * 0.51)));
   const mapUnit = () => state.mapUnit;
   const mapExtent = () => M.extent(state.sources, state.limit, mapUnit());
   function mapCamera() {
@@ -719,6 +758,7 @@
     const body = $("matrix").tBodies[0];
     const restoreFocus = body.contains(document.activeElement);
     body.innerHTML = mapRows(sources(), state.mapRefs ? state.systems : []);
+    scheduleCords();
     const readout = $("inspector").querySelector(".read-hz");
     if (readout)
       readout.textContent = mapFrequency(selectedHz(), mapCamera()) + " Hz";
@@ -934,6 +974,7 @@
       refs.length * 136 +
       55 +
       "px";
+    $("sheet-surface").style.minWidth = matrix.style.minWidth;
     let html =
       '<colgroup><col class="gutter">' +
       ss
@@ -1165,6 +1206,315 @@
       "</div>";
     refreshPlay();
   }
+  function linkName(id, n) {
+    return getSource(id).name + " " + pnum(n);
+  }
+  function incoming(id) {
+    return state.links.find((l) => l.to === id);
+  }
+  let linkOrigin = null,
+    picking = false;
+  function drawLinkPanel() {
+    const section = document.createElement("section");
+    section.className = "ins-block link-block";
+    const list = state.links
+      .map((l) => {
+        const label = linkName(l.from, l.fromN) + " → " + linkName(l.to, l.toN);
+        return (
+          '<li><button class="show-link" data-show-link="' +
+          l.to +
+          '" title="Show linked partials on the pitch map">' +
+          esc(label) +
+          '</button><button class="unlink" data-unlink="' +
+          l.to +
+          '" aria-label="Unlink ' +
+          esc(label) +
+          '" title="Unlink">' +
+          icon("unlink") +
+          "</button></li>"
+        );
+      })
+      .join("");
+    section.innerHTML =
+      '<div class="ins-heading"><h3>' +
+      icon("cord") +
+      ' Partial links</h3><button id="start-link" ' +
+      (state.sources.length < 2
+        ? 'disabled title="Add a second source to link partials"'
+        : "") +
+      ">Link partial</button></div>" +
+      (list
+        ? "<ul>" + list + "</ul>"
+        : '<p class="form-note">Link the selected partial to a partial on another source.</p>');
+    $("inspector").append(section);
+    $("link-picking").hidden = !picking;
+    if (picking)
+      $("link-picking").querySelector("span").textContent =
+        "From " +
+        linkName(linkOrigin.id, linkOrigin.n) +
+        " · Choose the destination partial.";
+  }
+  function proposedLink() {
+    return {
+      from: linkOrigin.id,
+      fromN: linkOrigin.n,
+      to: $("link-to").value,
+      toN: Number($("link-n").value),
+    };
+  }
+  function previewLink() {
+    const link = proposedLink();
+    try {
+      const resolved = W.resolve(state.sources, [...state.links, link]);
+      const target = resolved.find((s) => s.id === link.to);
+      $("link-preview").textContent =
+        target.name +
+        " will follow at " +
+        fmt(target.f) +
+        " Hz. The linked partials will both sound at " +
+        fmt(getSource(link.from).f * link.fromN) +
+        " Hz.";
+      $("tie-link").disabled = false;
+    } catch (err) {
+      $("link-preview").textContent = err.message;
+      $("tie-link").disabled = true;
+    }
+  }
+  function openLink(target = null) {
+    picking = false;
+    $("link-picking").hidden = true;
+    const options = sources().filter((s) => s.id !== linkOrigin.id);
+    $("link-origin").textContent =
+      "Origin · " +
+      linkName(linkOrigin.id, linkOrigin.n) +
+      " · " +
+      fmt(getSource(linkOrigin.id).f * linkOrigin.n) +
+      " Hz";
+    $("link-to").innerHTML = options
+      .map((s) => '<option value="' + s.id + '">' + esc(s.name) + "</option>")
+      .join("");
+    $("link-to").value =
+      target?.id || (options.find((s) => !incoming(s.id)) || options[0]).id;
+    $("link-n").innerHTML = Array.from(
+      { length: state.limit },
+      (_, i) => '<option value="' + (i + 1) + '">' + pnum(i + 1) + "</option>",
+    ).join("");
+    $("link-n").value =
+      target?.n ??
+      P.closest(
+        getSource(linkOrigin.id).f * linkOrigin.n,
+        getSource($("link-to").value),
+        state.limit,
+      ).n;
+    previewLink();
+    $("link-dialog").showModal();
+  }
+  $("link-to").onchange = () => {
+    $("link-n").value = P.closest(
+      getSource(linkOrigin.id).f * linkOrigin.n,
+      getSource($("link-to").value),
+      state.limit,
+    ).n;
+    previewLink();
+  };
+  $("link-n").onchange = previewLink;
+  $("link-form").onsubmit = (e) => {
+    e.preventDefault();
+    const links = [...state.links, proposedLink()];
+    try {
+      const resolved = W.resolve(state.sources, links);
+      clearAudio();
+      state.sources = resolved;
+      state.links = links;
+      $("link-dialog").close();
+      render();
+    } catch (err) {
+      $("link-preview").textContent = err.message;
+    }
+  };
+  $("pick-link").onclick = () => {
+    picking = true;
+    $("link-dialog").close();
+    render();
+    $("link-picking").scrollIntoView({ block: "nearest" });
+  };
+  function cancelPicking() {
+    picking = false;
+    linkOrigin = null;
+    $("link-picking").hidden = true;
+  }
+  $("cancel-pick").onclick = cancelPicking;
+  function pickDestination(id, n) {
+    if (!picking) return false;
+    if (id === linkOrigin.id) {
+      announce("Choose a partial on another source.", true);
+      return true;
+    }
+    openLink({ id, n });
+    return true;
+  }
+  function showLink(id) {
+    const l = incoming(id);
+    if (!l) return;
+    state.limit = limits.find(
+      (n) => n >= Math.max(state.limit, l.fromN, l.toN),
+    );
+    state.selected = { id: l.from, n: l.fromN };
+    switchView("map");
+    const f = getSource(l.from).f * l.fromN;
+    updateCamera(M.frame(f, f, mapExtent(), mapUnit()));
+    $("matrix-scroll").scrollIntoView({ block: "nearest" });
+  }
+
+  let cordFrame = 0;
+  function scheduleCords() {
+    if (!cordFrame)
+      cordFrame = requestAnimationFrame(() => {
+        cordFrame = 0;
+        drawCords();
+      });
+  }
+  function drawCords() {
+    const svg = $("cords"),
+      sheet = $("sheet-surface"),
+      tbody = $("matrix").tBodies[0];
+    if (!tbody || !state.links.length) {
+      svg.replaceChildren();
+      svg.style.display = "none";
+      return;
+    }
+    const box = tbody.getBoundingClientRect(),
+      outer = sheet.getBoundingClientRect();
+    const width = box.width,
+      height = box.height;
+    if (!width || !height) return;
+    svg.style.cssText =
+      "display:block;top:" +
+      (box.top - outer.top) +
+      "px;width:" +
+      width +
+      "px;height:" +
+      height +
+      "px";
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    function end(id, n) {
+      const el = tbody.querySelector(
+        '[data-src="' + id + '"][data-n="' + n + '"]',
+      );
+      if (!el) return null;
+      const segment = el.querySelector(".map-segment");
+      const r = (segment || el).getBoundingClientRect();
+      return {
+        left: r.left - box.left + (segment ? 0 : 9),
+        right: r.right - box.left - (segment ? 0 : 9),
+        y: r.top + r.height / 2 - box.top,
+      };
+    }
+    const paths = [];
+    for (const l of state.links) {
+      const a = end(l.from, l.fromN),
+        b = end(l.to, l.toN);
+      if (!a || !b) continue;
+      const dir = b.left > a.left ? 1 : -1;
+      const x1 = dir === 1 ? a.right : a.left,
+        x2 = dir === 1 ? b.left : b.right;
+      const sag = Math.min(24, Math.max(5, Math.abs(x2 - x1) * 0.085));
+      const d =
+        "M" +
+        x1 +
+        " " +
+        a.y +
+        " C" +
+        (x1 + (x2 - x1) * 0.24) +
+        " " +
+        (a.y + sag) +
+        " " +
+        (x2 - (x2 - x1) * 0.24) +
+        " " +
+        (b.y + sag) +
+        " " +
+        x2 +
+        " " +
+        b.y;
+      paths.push(
+        '<path class="cord-halo" d="' +
+          d +
+          '"/><path class="cord-line" d="' +
+          d +
+          '"/><circle class="cord-origin" cx="' +
+          x1 +
+          '" cy="' +
+          a.y +
+          '" r="3.7"/><circle class="cord-target" cx="' +
+          x2 +
+          '" cy="' +
+          b.y +
+          '" r="4.2"/><circle class="cord-core" cx="' +
+          x2 +
+          '" cy="' +
+          b.y +
+          '" r="1.6"/>',
+      );
+    }
+    svg.innerHTML = paths.join("");
+  }
+  new ResizeObserver(scheduleCords).observe($("matrix"));
+
+  function displayLayout() {
+    document.documentElement.classList.toggle(
+      "expanded-workspace",
+      state.fullscreen,
+    );
+    $("fullscreen").setAttribute("aria-pressed", !!state.fullscreen);
+    const label = state.fullscreen ? "Exit full screen" : "Full screen";
+    $("fullscreen").title = label;
+    $("fullscreen").setAttribute("aria-label", label);
+    $("native-fullscreen").hidden = !(
+      state.fullscreen &&
+      !document.fullscreenElement &&
+      document.fullscreenEnabled
+    );
+  }
+  async function browserFullscreen() {
+    if (document.fullscreenEnabled && !document.fullscreenElement) {
+      try {
+        await document.documentElement.requestFullscreen();
+      } catch {
+        announce("Expanded layout is active.", true);
+      }
+    }
+    displayLayout();
+  }
+  $("fullscreen").onclick = async () => {
+    state.fullscreen = !state.fullscreen;
+    render();
+    if (state.fullscreen) await browserFullscreen();
+    else if (document.fullscreenElement) await document.exitFullscreen();
+  };
+  $("native-fullscreen").onclick = browserFullscreen;
+  document.addEventListener("fullscreenchange", () => {
+    state.fullscreen = !!document.fullscreenElement;
+    render();
+  });
+  $("share").onclick = () => {
+    $("share-url").value = W.shareURL(state, location.href);
+    $("copy-status").textContent = "";
+    $("share-dialog").showModal();
+  };
+  $("copy-url").onclick = async () => {
+    const input = $("share-url");
+    try {
+      await navigator.clipboard.writeText(input.value);
+      $("copy-status").textContent = "Link copied.";
+    } catch {
+      input.focus();
+      input.select();
+      $("copy-status").textContent = document.execCommand("copy")
+        ? "Link copied."
+        : "Setup URL selected for copying.";
+    }
+  };
+
   let lastMapSelection =
     state.selected.id + "/" + state.selected.n + "/" + selectedHz();
   function render() {
@@ -1194,9 +1544,12 @@
       (state.muted ? "off" : "on") +
       "</span>";
     $("sound").setAttribute("aria-pressed", !state.muted);
+    displayLayout();
     drawMatrix();
     drawChart();
     drawInspector();
+    drawLinkPanel();
+    scheduleCords();
     save();
   }
   function choose(id, n, focus = false) {
@@ -1254,10 +1607,12 @@
     formKind = p.kind;
     $("source-name").value = p.name;
     $("group-name").value = p.group;
-    $("frequency").value = Number(presetHz(p, state.a).toFixed(8));
+    if (!$("frequency").readOnly)
+      $("frequency").value = Number(presetHz(p, state.a).toFixed(8));
     showColors(p.color);
   }
   function sourceDialog(id = null) {
+    cancelPicking();
     editing = id;
     const s = id ? getSource(id) : null;
     $("source-title").textContent = s ? "Edit source" : "Add source";
@@ -1265,6 +1620,15 @@
     $("preset").value = "custom";
     $("source-name").value = s?.name || "";
     $("frequency").value = s?.f || 110;
+    const driver = id && incoming(id);
+    $("frequency").readOnly = !!driver;
+    $("frequency-note").textContent = driver
+      ? "Follows " +
+        linkName(driver.from, driver.fromN) +
+        " at " +
+        pnum(driver.toN) +
+        ". Unlink in Partial links to tune independently."
+      : "";
     $("group-name").value = s?.group || "";
     formKind = s?.kind || "source";
     $("group-names").innerHTML = [
@@ -1358,11 +1722,16 @@
       kind: formKind,
       color: formColor,
     };
-    if (editing) Object.assign(getSource(editing), source);
-    else {
-      state.sources.push(source);
-      state.selected = { id: source.id, n: 1 };
+    const next = editing
+      ? state.sources.map((s) => (s.id === editing ? source : s))
+      : [...state.sources, source];
+    try {
+      state.sources = W.resolve(next, state.links);
+    } catch (err) {
+      $("frequency-note").textContent = err.message;
+      return;
     }
+    if (!editing) state.selected = { id: source.id, n: 1 };
     clearAudio();
     $("source-dialog").close();
     render();
@@ -1385,6 +1754,9 @@
       if (!$("source-dialog").open) reorder(id, dest.id);
     } else if (remove && state.sources.length > 1) {
       clearAudio();
+      state.links = state.links.filter(
+        (l) => l.from !== editing && l.to !== editing,
+      );
       state.sources = state.sources.filter((s) => s.id !== editing);
       if (state.selected.id === editing)
         state.selected = { id: state.sources[0].id, n: state.selected.n };
@@ -1459,6 +1831,7 @@
   function chooseClicked(e) {
     const b = e.target.closest("[data-src]");
     if (b) {
+      if (pickDestination(b.dataset.src, Number(b.dataset.n))) return;
       choose(b.dataset.src, Number(b.dataset.n));
       if (e.currentTarget === $("matrix"))
         $("matrix")
@@ -1478,6 +1851,22 @@
     if (b) choose(b.dataset.legend, state.selected.n);
   };
   $("inspector").onclick = (e) => {
+    if (e.target.closest("#start-link")) {
+      linkOrigin = { ...state.selected };
+      openLink();
+      return;
+    }
+    const cut = e.target.closest("[data-unlink]");
+    if (cut) {
+      state.links = state.links.filter((l) => l.to !== cut.dataset.unlink);
+      render();
+      return;
+    }
+    const show = e.target.closest("[data-show-link]");
+    if (show) {
+      showLink(show.dataset.showLink);
+      return;
+    }
     if (e.target.closest("#play")) {
       if (playing) clearAudio();
       else play([selectedHz()]);
@@ -1518,6 +1907,7 @@
   };
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (picking) cancelPicking();
       clearAudio();
       return;
     }
@@ -1574,7 +1964,12 @@
       id = ss[j].id;
       if (state.view === "pitch" || state.view === "map")
         n = P.closest(selectedHz(), ss[j], state.limit).n;
-    } else if (e.code !== "Space") return;
+    } else if (e.code !== "Space" && !(picking && e.key === "Enter")) return;
+    if (picking && (e.code === "Space" || e.key === "Enter")) {
+      e.preventDefault();
+      pickDestination(id, n);
+      return;
+    }
     e.preventDefault();
     choose(id, n, true);
   });
@@ -1586,4 +1981,9 @@
     if (document.hidden) clearAudio();
   });
   render();
+  if (setupError)
+    announce(
+      "Could not read this setup link. Your saved workspace is open.",
+      true,
+    );
 })();

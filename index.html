@@ -6,41 +6,15 @@
     <meta name="theme-color" content="#163d34" />
     <title>PolySpectra · Spectrum workspace</title>
     <link rel="icon" href="./mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./style.css?v=pitch-map" />
-    <script defer src="./pitch.js?v=pitch-map"></script>
+    <link rel="stylesheet" href="./style.css?v=partial-links" />
+    <script defer src="./pitch.js?v=partial-links"></script>
     <script defer src="./pitch-map.js"></script>
-    <script defer src="./app.js?v=pitch-map"></script>
+    <script defer src="./workspace.js"></script>
+    <script defer src="./app.js?v=partial-links"></script>
   </head>
   <body>
-    <header class="topbar">
-      <div class="top-inner">
-        <div class="brand">
-          <img src="./mark.svg" width="35" height="35" alt="" />PolySpectra
-        </div>
-        <nav aria-label="Workspace tools">
-          <button id="sound" class="quiet"></button
-          ><span class="nav-divider"></span
-          ><button id="help" class="quiet">
-            <i data-icon="keyboard"></i><span>Shortcuts</span>
-          </button>
-        </nav>
-      </div>
-    </header>
     <main>
-      <section class="page-heading">
-        <div>
-          <h1>Spectrum workspace</h1>
-          <p>
-            Compare natural harmonics across instruments and tuning systems.
-          </p>
-        </div>
-        <div class="actions">
-          <button id="tuning"><i data-icon="tuning"></i>Tuning</button
-          ><button id="add" class="primary">
-            <i data-icon="plus"></i>Add source
-          </button>
-        </div>
-      </section>
+      <h1 class="sr">PolySpectra spectrum workspace</h1>
       <section class="overview panel" aria-labelledby="overlay-title">
         <div class="chart-head">
           <h2 id="overlay-title"><i data-icon="wave"></i>Spectrum overlay</h2>
@@ -54,27 +28,61 @@
           <span>Frequency (Hz)</span><span>Logarithmic scale</span>
         </div>
       </section>
+      <div class="section-tools workspace-toolbar">
+        <div class="section-title">
+          <h2 id="matrix-title">Partial matrix</h2>
+          <span id="count" class="count"></span>
+        </div>
+        <nav class="workspace-edit" aria-label="Source and tuning controls">
+          <button id="add" class="primary">
+            <i data-icon="plus"></i>Add source
+          </button>
+          <button id="tuning"><i data-icon="tuning"></i>Tuning</button>
+        </nav>
+        <div class="matrix-actions">
+          <div class="segmented" aria-label="Spectrum view">
+            <button id="by-map">Pitch map</button>
+            <button id="by-partial">By partial</button
+            ><button id="by-pitch">By pitch</button>
+          </div>
+          <select id="limit" aria-label="Number of partials">
+            <option value="8">8 partials</option>
+            <option value="12">12 partials</option>
+            <option value="16">16 partials</option>
+            <option value="24">24 partials</option>
+            <option value="32">32 partials</option>
+          </select>
+        </div>
+        <nav class="utility-tools" aria-label="Workspace tools">
+          <button id="sound" class="quiet"></button>
+          <button
+            id="help"
+            class="quiet"
+            title="Keyboard shortcuts"
+            aria-label="Keyboard shortcuts"
+          >
+            <i data-icon="keyboard"></i>
+          </button>
+          <button
+            id="fullscreen"
+            class="quiet"
+            title="Full screen"
+            aria-label="Full screen"
+          >
+            <i data-icon="expand"></i>
+          </button>
+          <button id="native-fullscreen" hidden>
+            Enter browser fullscreen
+          </button>
+          <button id="share" title="Share this workspace">
+            <i data-icon="share"></i>Share setup
+          </button>
+        </nav>
+      </div>
       <div class="work-area">
         <section class="matrix-section" aria-labelledby="matrix-title">
-          <div class="section-tools">
-            <div class="section-title">
-              <h2 id="matrix-title">Partial matrix</h2>
-              <span id="count" class="count"></span>
-            </div>
-            <div class="matrix-actions">
-              <div class="segmented" aria-label="Spectrum view">
-                <button id="by-map">Pitch map</button>
-                <button id="by-partial">By partial</button
-                ><button id="by-pitch">By pitch</button>
-              </div>
-              <select id="limit" aria-label="Number of partials">
-                <option value="8">8 partials</option>
-                <option value="12">12 partials</option>
-                <option value="16">16 partials</option>
-                <option value="24">24 partials</option>
-                <option value="32">32 partials</option>
-              </select>
-            </div>
+          <div id="link-picking" hidden role="status">
+            <span></span><button id="cancel-pick">Cancel</button>
           </div>
           <div id="map-tools" class="map-tools" hidden>
             <label for="map-unit" class="sr">Vertical spacing</label>
@@ -117,7 +125,10 @@
             role="region"
             aria-label="Playable partial matrix"
           >
-            <table id="matrix"></table>
+            <div id="sheet-surface">
+              <table id="matrix"></table>
+              <svg id="cords" aria-hidden="true"></svg>
+            </div>
           </div>
           <div class="matrix-foot">
             <span id="view-note"></span
@@ -133,7 +144,14 @@
         ></aside>
       </div>
       <footer>
-        <span><i data-icon="cursor"></i>Click a partial to hear it</span
+        <span class="footer-brand"
+          ><img
+            src="./mark.svg"
+            width="20"
+            height="20"
+            alt=""
+          />PolySpectra</span
+        ><span><i data-icon="cursor"></i>Click a partial to hear it</span
         ><span><kbd>↑</kbd><kbd>↓</kbd> Move through a series</span
         ><span id="save-status"></span>
       </footer>
@@ -153,6 +171,7 @@
             <option value="horn">Horn in F · open tubing</option>
             <option value="violin">Violin · open G</option>
             <option value="bass">Double bass · open E</option>
+            <option value="theremin">Theremin · A3</option>
             <option value="trumpet">B♭ trumpet · open tubing</option>
           </select></label
         >
@@ -177,6 +196,7 @@
               placeholder="e.g. Strings"
           /></label>
         </div>
+        <p class="form-note" id="frequency-note" role="status"></p>
         <datalist id="group-names"></datalist>
         <fieldset>
           <legend>Column color</legend>
@@ -225,6 +245,42 @@
         </div>
       </form>
     </dialog>
+    <dialog id="link-dialog" aria-labelledby="link-title">
+      <form id="link-form">
+        <div class="dialog-title">
+          <h2 id="link-title">Link partials</h2>
+          <button type="button" class="icon close" aria-label="Close">
+            <i data-icon="x"></i>
+          </button>
+        </div>
+        <p class="link-origin" id="link-origin"></p>
+        <div class="form-row">
+          <label>Destination source<select id="link-to"></select></label
+          ><label>Destination partial<select id="link-n"></select></label>
+        </div>
+        <p id="link-preview" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button type="button" id="pick-link">Pick on spectrum</button
+          ><button class="primary" id="tie-link">Create link</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="share-dialog" aria-labelledby="share-title">
+      <div class="dialog-title">
+        <h2 id="share-title">Share setup</h2>
+        <button class="icon close" aria-label="Close">
+          <i data-icon="x"></i>
+        </button>
+      </div>
+      <p class="form-note">
+        This link opens the current sources, partial links, tuning and view.
+      </p>
+      <label>Setup URL<input id="share-url" readonly /></label>
+      <div class="dialog-actions">
+        <span id="copy-status" role="status"></span
+        ><button class="primary" id="copy-url">Copy link</button>
+      </div>
+    </dialog>
     <dialog id="help-dialog" aria-label="Playing PolySpectra">
       <div class="dialog-title">
         <h2>Playing PolySpectra</h2>
@@ -270,6 +326,11 @@
         of the reference. EDO steps count from A4. In Closest partials, positive
         cents mean the other source is higher. Click either comparison to hear
         both tones for six seconds.
+      </p>
+      <p>
+        Select an origin partial, then choose Link partial in the inspector. Its
+        frequency sets the destination source’s fundamental. Red cords join
+        linked partials. Unlink keeps the destination at its current frequency.
       </p>
       <p class="form-note">
         Each source uses the ideal harmonic series, fₙ = n × f₁. Peak heights
