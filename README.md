@@ -1,6 +1,6 @@
 # PolySpectra
 
-A playable workbench for comparing the harmonic series of strings, brass instruments and other periodic sound sources.
+A playable workbench for comparing the harmonic series of strings, brass instruments and other periodic sound sources. [Open PolySpectra](https://adrianartacho.github.io/PolySpectra/).
 
 ## Try a comparison
 
@@ -23,6 +23,8 @@ For an equal division of the octave into *d* steps, step *k* has frequency A4 ×
 
 Open `index.html` locally in a modern browser or serve this directory with `python3 -m http.server`. All assets are local and the app has no build step.
 
-For GitHub Pages, choose **Settings → Pages → Deploy from a branch**, select the branch containing the app and **/(root)**, then save. [GitHub Pages publishing sources](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
+This repository serves the root of the `gh-pages` branch. Develop on `main` and fast-forward `gh-pages` to a tested commit to publish it.
+
+For a fork, choose **Settings → Pages → Deploy from a branch**, select the branch containing the app and **/(root)**, then save. [GitHub Pages publishing sources](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site)
 
 Run pitch checks with `node --test tests/pitch.test.cjs`.
