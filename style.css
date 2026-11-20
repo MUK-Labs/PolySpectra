@@ -269,6 +269,8 @@ h2 {
   margin: 2px 0 0;
 }
 .work-area {
+  --sheet-height: 96vh;
+  --sheet-height: 96dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 282px;
   gap: 20px;
@@ -330,7 +332,7 @@ select {
 }
 .matrix-scroll {
   overflow: auto;
-  max-height: var(--sheet-height, 65dvh);
+  max-height: var(--sheet-height);
   scrollbar-width: thin;
   position: relative;
 }
@@ -339,6 +341,9 @@ select {
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
+}
+.matrix-scroll:not(.map-mode) table {
+  height: calc(var(--sheet-height) - 2px);
 }
 .matrix-scroll th,
 .matrix-scroll td {
@@ -1151,7 +1156,7 @@ input[type="color"] {
   min-width: 0;
 }
 .matrix-scroll.map-mode {
-  height: var(--sheet-height, 65dvh);
+  height: var(--sheet-height);
   overflow-y: hidden;
 }
 .at-fit .map-lane {
@@ -1182,7 +1187,9 @@ input[type="color"] {
 }
 @media (min-width: 851px) {
   #inspector {
-    max-height: var(--inspector-height, 80dvh);
+    position: sticky;
+    top: 2dvh;
+    max-height: var(--sheet-height);
     overflow-y: auto;
     scrollbar-width: thin;
   }

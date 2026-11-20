@@ -111,7 +111,6 @@ p {
   margin: 0.7rem 0;
   max-width: 72ch;
 }
-.examples,
 .split {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -122,41 +121,9 @@ p {
   flex-direction: column;
   padding: clamp(1rem, 2.5vw, 1.5rem);
   border: 1px solid var(--line);
-  border-top: 4px solid #7ea8d7;
+  border-top: 4px solid #a88acb;
   border-radius: 0.65rem;
   background: #fff;
-}
-.example.strings {
-  border-top-color: #a88acb;
-}
-.example table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-  font-variant-numeric: tabular-nums;
-  margin: 0.3rem 0 0.9rem;
-}
-caption {
-  text-align: left;
-  font-weight: 600;
-  margin-bottom: 0.35rem;
-}
-th,
-td {
-  padding: 0.23rem 0.3rem;
-  border-bottom: 1px solid #e1e7df;
-  text-align: right;
-}
-th:first-child,
-td:first-child {
-  text-align: left;
-}
-th {
-  font-weight: 500;
-  color: #526659;
-}
-.reference {
-  background: #eff4f3;
 }
 .launch {
   align-self: flex-start;
@@ -171,7 +138,7 @@ th {
 .launch:hover {
   background: #163c30;
 }
-.strings p:last-of-type {
+.example p:last-of-type {
   margin-bottom: 1.1rem;
 }
 .split {
@@ -223,7 +190,6 @@ footer {
   justify-content: space-between;
 }
 @media (max-width: 700px) {
-  .examples,
   .split {
     grid-template-columns: minmax(0, 1fr);
     gap: 1rem;

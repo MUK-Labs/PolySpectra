@@ -644,39 +644,7 @@
     if (layoutFrame) return;
     layoutFrame = requestAnimationFrame(() => {
       layoutFrame = 0;
-      const sheet = $("matrix-scroll"),
-        area = sheet.closest(".work-area");
-      const main = area.closest("main");
-      const height = window.visualViewport?.height ?? window.innerHeight;
-      const footer = main.querySelector("footer"),
-        foot = area.querySelector(".matrix-foot");
-      const stacked = window.matchMedia("(max-width:850px)").matches;
-      const footerSpace =
-        !stacked && footer.offsetHeight
-          ? footer.offsetHeight + parseFloat(getComputedStyle(footer).marginTop)
-          : 0;
-      const bottom =
-        height -
-        footerSpace -
-        (stacked ? 8 : parseFloat(getComputedStyle(main).paddingBottom));
-      const available =
-        bottom -
-        (sheet.getBoundingClientRect().top + window.scrollY) -
-        foot.offsetHeight -
-        parseFloat(getComputedStyle(foot).marginTop);
-      area.style.setProperty(
-        "--sheet-height",
-        Math.max(
-          stacked ? Math.round(height * 0.58) : 238,
-          Math.floor(available),
-        ) + "px",
-      );
-      const inspectorSpace =
-        bottom - (area.getBoundingClientRect().top + window.scrollY);
-      area.style.setProperty(
-        "--inspector-height",
-        Math.max(250, Math.floor(inspectorSpace)) + "px",
-      );
+      const sheet = $("matrix-scroll");
       if (state.view === "map" && $("matrix").tHead) {
         const height = Math.max(
           80,
@@ -2360,12 +2328,7 @@
     e.preventDefault();
     choose(id, n, true);
   });
-  const layoutObserver = new ResizeObserver(scheduleWorkspaceSize);
-  for (const el of document.querySelectorAll(
-    ".overview,.workspace-toolbar,#map-tools,#link-picking,.matrix-foot,main footer,#matrix-scroll",
-  ))
-    layoutObserver.observe(el);
-  window.visualViewport?.addEventListener("resize", scheduleWorkspaceSize);
+  new ResizeObserver(scheduleWorkspaceSize).observe($("matrix-scroll"));
   window.addEventListener("resize", () => {
     drawChart();
     scheduleWorkspaceSize();

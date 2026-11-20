@@ -4,10 +4,9 @@ A playable workbench for comparing harmonic series and the playable pitches of i
 
 The [user guide](https://muk-labs.github.io/PolySpectra/docs/) covers playing, navigation, source tuning, pitch links, MIDI and sharing.
 
-## Example setups
+## Example setup
 
-- [Quarter-tone pianos](https://muk-labs.github.io/PolySpectra/?example=quarter-tone-pianos) opens two 12-EDO pianos separated by 50 cents.
-- [Four strings, keyboard and horn](https://muk-labs.github.io/PolySpectra/?example=linked-strings) opens a six-source ensemble with five tuning links, 32 pitches per source and a 31-EDO reference lane. Change the keyboard A4 to retune the chain.
+[Four strings, keyboard and horn](https://muk-labs.github.io/PolySpectra/?example=linked-strings) opens a six-source ensemble with five tuning links, 32 pitches per source and a 31-EDO reference lane. Change the keyboard A4 to retune the chain.
 
 ## Try a comparison
 
@@ -23,8 +22,6 @@ The initial workspace contains cello C2, open horn in F, and violin G3. Select t
 - The browser saves the workspace on this device.
 
 ## Tempered instruments
-
-[Open the quarter-tone piano pair](https://muk-labs.github.io/PolySpectra/?example=quarter-tone-pianos). Both keyboards use 12-EDO. Piano I plays A4 at 440 Hz and Piano II plays the same key at 452.89 Hz. Select Piano I’s A4 and audition either equally close key on Piano II under **Closest pitches**. The signed difference is the other instrument’s pitch minus the selected pitch, in cents.
 
 In **Add source** choose a piano preset or change **Pitch series** to **Equal temperament (EDO)** or **Custom octave in cents**. Each instrument has its own reference in Hz, cent offset and first displayed step. For 12-EDO, step 0 is the instrument’s A4. For a full piano range, set the first step to −48 and choose **88 pitches** in the toolbar. Custom octaves use ascending cent values beginning at 0, with the octave inferred at 1200. Tempered instruments can be linked to harmonic partials and to one another. Share links preserve the scale and tuning.
 

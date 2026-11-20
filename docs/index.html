@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#152e27" />
     <title>PolySpectra · User guide</title>
     <link rel="icon" href="../mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./guide.css" />
+    <link rel="stylesheet" href="./guide.css?v=linked-example" />
   </head>
   <body>
     <header>
@@ -23,72 +23,29 @@
         between them, and tune one from the other.
       </p>
       <nav class="contents" aria-label="On this page">
-        <a href="#examples">Example setups</a
-        ><a href="#play">Play and compare</a
+        <a href="#examples">Example setup</a><a href="#play">Play and compare</a
         ><a href="#sources">Sources and tuning</a
         ><a href="#links">Link pitches</a><a href="#midi">MIDI and sharing</a>
       </nav>
       <section id="examples">
-        <h2>Example setups</h2>
-        <div class="examples">
-          <article class="example">
-            <h3>Quarter-tone pianos</h3>
-            <p>
-              Two 12-EDO keyboards share the same written keys. Piano II sounds
-              50 cents higher. Select A4 on Piano I, then listen to either
-              neighbour under <b>Closest pitches</b>.
-            </p>
-            <table>
-              <caption>
-                Nearest keys to Piano I’s A4
-              </caption>
-              <thead>
-                <tr>
-                  <th>Source and key</th>
-                  <th>Frequency</th>
-                  <th>Distance</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Piano II · A4</td>
-                  <td>452.89 Hz</td>
-                  <td>+50¢</td>
-                </tr>
-                <tr class="reference">
-                  <td>Piano I · A4</td>
-                  <td>440.00 Hz</td>
-                  <td>0¢</td>
-                </tr>
-                <tr>
-                  <td>Piano II · A♭4</td>
-                  <td>427.47 Hz</td>
-                  <td>−50¢</td>
-                </tr>
-              </tbody>
-            </table>
-            <a class="launch" href="../?example=quarter-tone-pianos"
-              >Play the piano pair</a
-            >
-          </article>
-          <article class="example strings">
-            <h3>Four strings, keyboard and horn</h3>
-            <p>
-              The keyboard’s A4 fixes String I’s second partial at 440 Hz. From
-              there, four successive pure fifths tune Strings II, III, IV and
-              the horn. The red cords show which partials meet.
-            </p>
-            <p>
-              Open the keyboard’s column menu and change its A4 from
-              <b>440 to 442 Hz</b>. String I moves from 220 to 221 Hz, and every
-              instrument in the chain follows. The 31-EDO lane gives you an
-              independent reference.
-            </p>
-            <a class="launch" href="../?example=linked-strings"
-              >Play the linked ensemble</a
-            >
-          </article>
-        </div>
+        <h2>Example setup</h2>
+        <article class="example">
+          <h3>Four strings, keyboard and horn</h3>
+          <p>
+            The keyboard’s A4 fixes String I’s second partial at 440 Hz. From
+            there, four successive pure fifths tune Strings II, III, IV and the
+            horn. The red cords show which partials meet.
+          </p>
+          <p>
+            Open the keyboard’s column menu and change its A4 from
+            <b>440 to 442 Hz</b>. String I moves from 220 to 221 Hz, and every
+            instrument in the chain follows. The 31-EDO lane gives you an
+            independent reference.
+          </p>
+          <a class="launch" href="../?example=linked-strings"
+            >Play the linked ensemble</a
+          >
+        </article>
       </section>
       <section id="play">
         <h2>Play and compare</h2>
@@ -103,10 +60,10 @@
           <div>
             <h3>Find your way around</h3>
             <p>
-              The pitch map and table use the available screen height. Choose
-              <b>Collapse</b> in the green spectrum overlay to give the pitches
-              more room. On narrow screens, <b>Inspector</b> and
-              <b>Back to pitches</b> jump between panels.
+              The pitch map and tables each use nearly a full screen of height.
+              Choose <b>Collapse</b> in the green spectrum overlay to bring the
+              table closer to the top of the page. On narrow screens,
+              <b>Inspector</b> and <b>Back to pitches</b> jump between panels.
             </p>
             <ul>
               <li>
