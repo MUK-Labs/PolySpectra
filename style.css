@@ -207,6 +207,21 @@ h2 {
   gap: 9px;
   letter-spacing: -0.015em;
 }
+.chart-head h2 button {
+  background: transparent;
+  color: inherit;
+  border: 0;
+  padding: 3px 2px;
+  font: inherit;
+  letter-spacing: inherit;
+}
+#overlay-action {
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  color: #c2d4c7;
+}
 .chart-head h2 i {
   color: #bde4aa;
 }
@@ -315,7 +330,7 @@ select {
 }
 .matrix-scroll {
   overflow: auto;
-  max-height: 580px;
+  max-height: var(--sheet-height, 65dvh);
   scrollbar-width: thin;
   position: relative;
 }
@@ -901,9 +916,6 @@ input[type="color"] {
   .source-sign {
     display: grid;
   }
-  .matrix-scroll {
-    max-height: 505px;
-  }
 }
 @media (max-width: 600px) {
   .top-inner,
@@ -978,9 +990,7 @@ input[type="color"] {
   .matrix-actions {
     flex-wrap: wrap;
   }
-  .matrix-scroll {
-    max-height: 430px;
-  }
+
   .section-title {
     gap: 7px;
   }
@@ -1131,9 +1141,77 @@ input[type="color"] {
 .map-refs input {
   accent-color: var(--forest);
 }
-.matrix-scroll.map-mode {
-  max-height: none;
+.sheet-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
 }
+.sheet-row > .matrix-scroll {
+  flex: 1;
+  min-width: 0;
+}
+.matrix-scroll.map-mode {
+  height: var(--sheet-height, 65dvh);
+  overflow-y: hidden;
+}
+.at-fit .map-lane {
+  touch-action: pan-y;
+}
+#pan-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 32px;
+  padding: 3px 0;
+}
+#pan-rail button {
+  width: 30px;
+  min-height: 30px;
+  padding: 3px;
+}
+#pan-position {
+  writing-mode: vertical-lr;
+  direction: rtl;
+  flex: 1;
+  min-height: 0;
+  width: 24px;
+  margin: 0;
+  accent-color: var(--forest);
+  cursor: pointer;
+}
+@media (min-width: 851px) {
+  #inspector {
+    max-height: var(--inspector-height, 80dvh);
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+}
+.guide-link,
+.phone-jump {
+  color: var(--forest);
+  font-weight: 600;
+  font-size: 0.86rem;
+  text-underline-offset: 0.18em;
+}
+.guide-link {
+  padding: 5px;
+}
+.phone-jump {
+  display: none;
+}
+@media (max-width: 850px) {
+  .phone-jump {
+    display: inline-block;
+  }
+  .inspector-title .phone-jump {
+    margin-left: auto;
+  }
+  .matrix-foot {
+    flex-wrap: wrap;
+  }
+}
+
 .map-mode .map-axis {
   z-index: 3;
   background: #f5f7f1;

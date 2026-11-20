@@ -6,32 +6,41 @@
     <meta name="theme-color" content="#163d34" />
     <title>PolySpectra · Spectrum workspace</title>
     <link rel="icon" href="./mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./style.css?v=tempered-midi" />
+    <link rel="stylesheet" href="./style.css?v=adaptive-guide" />
     <script defer src="./pitch.js?v=tempered-midi"></script>
     <script defer src="./pitch-map.js?v=tempered-midi"></script>
-    <script defer src="./workspace.js?v=tempered-midi"></script>
+    <script defer src="./workspace.js?v=adaptive-guide"></script>
     <script defer src="./midi.js?v=tempered-midi"></script>
-    <script defer src="./app.js?v=tempered-midi"></script>
+    <script defer src="./app.js?v=adaptive-guide"></script>
   </head>
   <body>
     <main>
       <h1 class="sr">PolySpectra spectrum workspace</h1>
       <section class="overview panel" aria-labelledby="overlay-title">
         <div class="chart-head">
-          <h2 id="overlay-title"><i data-icon="wave"></i>Spectrum overlay</h2>
+          <h2 id="overlay-title">
+            <button
+              id="toggle-overlay"
+              aria-expanded="true"
+              aria-controls="chart chart-foot"
+            >
+              <i data-icon="wave"></i>Spectrum overlay
+              <span id="overlay-action">Collapse</span>
+            </button>
+          </h2>
           <div id="legend" class="legend"></div>
         </div>
         <div
           id="chart"
           aria-label="Interactive source pitches on a logarithmic axis"
         ></div>
-        <div class="chart-foot">
+        <div class="chart-foot" id="chart-foot">
           <span>Frequency (Hz)</span><span>Logarithmic scale</span>
         </div>
       </section>
       <div class="section-tools workspace-toolbar">
         <div class="section-title">
-          <h2 id="matrix-title">Partial matrix</h2>
+          <h2 id="matrix-title" tabindex="-1">Partial matrix</h2>
           <span id="count" class="count"></span>
         </div>
         <nav class="workspace-edit" aria-label="Source and tuning controls">
@@ -84,6 +93,9 @@
           <button id="native-fullscreen" hidden>
             Enter browser fullscreen
           </button>
+          <a class="guide-link" href="./docs/" target="_blank" rel="noopener"
+            >Guide</a
+          >
           <button id="share" title="Share this workspace">
             <i data-icon="share"></i>Share setup
           </button>
@@ -129,19 +141,52 @@
               ><input type="checkbox" id="map-refs" /> Tuning lanes</label
             >
           </div>
-          <div
-            id="matrix-scroll"
-            class="matrix-scroll"
-            role="region"
-            aria-label="Playable pitch matrix"
-          >
-            <div id="sheet-surface">
-              <table id="matrix"></table>
-              <svg id="cords" aria-hidden="true"></svg>
+          <div class="sheet-row">
+            <div
+              id="matrix-scroll"
+              class="matrix-scroll"
+              role="region"
+              aria-label="Playable pitch matrix"
+            >
+              <div id="sheet-surface">
+                <table id="matrix"></table>
+                <svg id="cords" aria-hidden="true"></svg>
+              </div>
+            </div>
+            <div
+              id="pan-rail"
+              hidden
+              role="group"
+              aria-label="Pitch map position"
+            >
+              <button
+                id="pan-up"
+                aria-label="Pan to higher pitches"
+                title="Pan to higher pitches"
+              >
+                ▴
+              </button>
+              <input
+                id="pan-position"
+                type="range"
+                min="0"
+                max="10000"
+                step="1"
+                aria-label="Pitch map position"
+                title="Scroll through the pitch range"
+              />
+              <button
+                id="pan-down"
+                aria-label="Pan to lower pitches"
+                title="Pan to lower pitches"
+              >
+                ▾
+              </button>
             </div>
           </div>
           <div class="matrix-foot">
-            <span id="view-note"></span
+            <a class="phone-jump" href="#inspector">Inspector</a
+            ><span id="view-note"></span
             ><button id="groups" class="text-action">
               <i data-icon="group"></i><span>Group sources</span>
             </button>
@@ -149,6 +194,7 @@
         </section>
         <aside
           id="inspector"
+          tabindex="-1"
           class="panel"
           aria-label="Pitch inspector"
         ></aside>
@@ -438,6 +484,11 @@
         scale each octave. Peak heights are illustrative. The browser plays sine
         tones. MIDI out sends each source’s sounding pitch to its assigned
         channel.
+      </p>
+      <p>
+        <a href="./docs/" target="_blank" rel="noopener"
+          >Open the user guide and example setups</a
+        >
       </p>
     </dialog>
     <div id="announce" class="sr" role="status" aria-live="polite"></div>

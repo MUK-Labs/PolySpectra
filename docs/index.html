@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#152e27" />
+    <title>PolySpectra · User guide</title>
+    <link rel="icon" href="../mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./guide.css" />
+  </head>
+  <body>
+    <header>
+      <nav aria-label="PolySpectra">
+        <a class="brand" href="../"
+          ><img src="../mark.svg" width="31" height="31" alt="" />PolySpectra</a
+        ><a class="open" href="../">Open workspace</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Using PolySpectra</h1>
+      <p class="intro">
+        Compare the pitches two instruments can produce, listen to the distance
+        between them, and tune one from the other.
+      </p>
+      <nav class="contents" aria-label="On this page">
+        <a href="#examples">Example setups</a
+        ><a href="#play">Play and compare</a
+        ><a href="#sources">Sources and tuning</a
+        ><a href="#links">Link pitches</a><a href="#midi">MIDI and sharing</a>
+      </nav>
+      <section id="examples">
+        <h2>Example setups</h2>
+        <div class="examples">
+          <article class="example">
+            <h3>Quarter-tone pianos</h3>
+            <p>
+              Two 12-EDO keyboards share the same written keys. Piano II sounds
+              50 cents higher. Select A4 on Piano I, then listen to either
+              neighbour under <b>Closest pitches</b>.
+            </p>
+            <table>
+              <caption>
+                Nearest keys to Piano I’s A4
+              </caption>
+              <thead>
+                <tr>
+                  <th>Source and key</th>
+                  <th>Frequency</th>
+                  <th>Distance</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Piano II · A4</td>
+                  <td>452.89 Hz</td>
+                  <td>+50¢</td>
+                </tr>
+                <tr class="reference">
+                  <td>Piano I · A4</td>
+                  <td>440.00 Hz</td>
+                  <td>0¢</td>
+                </tr>
+                <tr>
+                  <td>Piano II · A♭4</td>
+                  <td>427.47 Hz</td>
+                  <td>−50¢</td>
+                </tr>
+              </tbody>
+            </table>
+            <a class="launch" href="../?example=quarter-tone-pianos"
+              >Play the piano pair</a
+            >
+          </article>
+          <article class="example strings">
+            <h3>Four strings, keyboard and horn</h3>
+            <p>
+              The keyboard’s A4 fixes String I’s second partial at 440 Hz. From
+              there, four successive pure fifths tune Strings II, III, IV and
+              the horn. The red cords show which partials meet.
+            </p>
+            <p>
+              Open the keyboard’s column menu and change its A4 from
+              <b>440 to 442 Hz</b>. String I moves from 220 to 221 Hz, and every
+              instrument in the chain follows. The 31-EDO lane gives you an
+              independent reference.
+            </p>
+            <a class="launch" href="../?example=linked-strings"
+              >Play the linked ensemble</a
+            >
+          </article>
+        </div>
+      </section>
+      <section id="play">
+        <h2>Play and compare</h2>
+        <p>
+          Click a horizontal segment in the <b>Pitch map</b> or a cell in either
+          table. The inspector shows its sounding frequency, deviations from
+          your tuning references, and the closest pitches on the other
+          instruments. Click a match to hear both tones together for six
+          seconds. A positive value means the other instrument sounds higher.
+        </p>
+        <div class="split">
+          <div>
+            <h3>Find your way around</h3>
+            <p>
+              The pitch map and table use the available screen height. Choose
+              <b>Collapse</b> in the green spectrum overlay to give the pitches
+              more room. On narrow screens, <b>Inspector</b> and
+              <b>Back to pitches</b> jump between panels.
+            </p>
+            <ul>
+              <li>
+                <b>Pitch map</b> spaces pitches by cents or Hz. Choose
+                <b>Closest pair</b> to magnify a small interval or
+                <b>Fit all</b> to see the whole range.
+              </li>
+              <li>
+                Once zoomed in, use the vertical slider to travel across the
+                range. Its end buttons move by most of a screen. You can also
+                scroll or drag to pan, or pinch or Ctrl/⌘-scroll to zoom.
+              </li>
+              <li>
+                <b>By partial</b> or <b>By index</b> lines up the same row
+                number across sources. <b>By pitch</b> groups pitches by the
+                nearest 12-EDO note.
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h3>Keyboard controls</h3>
+            <dl class="keys">
+              <div>
+                <dt><kbd>↑</kbd> <kbd>↓</kbd></dt>
+                <dd>Play the next or previous pitch</dd>
+              </div>
+              <div>
+                <dt><kbd>←</kbd> <kbd>→</kbd></dt>
+                <dd>Move to an adjacent source</dd>
+              </div>
+              <div>
+                <dt><kbd>Space</kbd> / <kbd>Esc</kbd></dt>
+                <dd>Replay / stop</dd>
+              </div>
+              <div>
+                <dt><kbd>+</kbd> <kbd>−</kbd></dt>
+                <dd>Zoom around the selection</dd>
+              </div>
+              <div>
+                <dt><kbd>PgUp</kbd> <kbd>PgDn</kbd></dt>
+                <dd>Pan with the map focused</dd>
+              </div>
+              <div>
+                <dt><kbd>Home</kbd></dt>
+                <dd>Fit all with the map focused</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </section>
+      <section id="sources">
+        <h2>Sources and tuning</h2>
+        <p>
+          Choose <b>Add source</b>. A harmonic source takes a sounding
+          fundamental in Hz. For example, a 220 Hz string produces partials at
+          220, 440 and 660 Hz. A tempered instrument takes an octave division
+          count or a list of ascending degrees in cents, starting at 0. Give
+          each instrument its own reference frequency and offset.
+        </p>
+        <p>
+          For an 88-key, 12-EDO piano, choose <b>−48</b> as the first displayed
+          step and <b>88 pitches</b> in the toolbar. Step 0 is that instrument’s
+          A4. Use the column menu to change its tuning, name, group or colour,
+          or to move it left or right.
+        </p>
+        <p>
+          <b>Tuning</b> sets concert A4 and the reference systems used for
+          comparison. To retune an instrument, edit its source.
+          <b>Tuning lanes</b> draws the active references beside the instrument
+          columns.
+        </p>
+      </section>
+      <section id="links">
+        <h2>Link pitches</h2>
+        <p>
+          Select the pitch that will drive the tuning. In the inspector choose
+          <b>Link pitch</b> (or <b>Link partial</b>), then choose a destination
+          source and pitch. The preview shows the destination’s new tuning.
+          Choose <b>Create link</b> to make both endpoints sound at the same
+          frequency.
+        </p>
+        <p>
+          The solid knot marks the driving pitch and the ring marks the
+          follower. Retuning the driver propagates through the chain. Select a
+          link in the inspector to bring it into view. <b>Unlink</b> releases
+          the follower at its current tuning.
+        </p>
+      </section>
+      <section id="midi">
+        <h2>MIDI and sharing</h2>
+        <p>
+          To hear your sample libraries, choose
+          <b>MIDI out → Connect MIDI</b> and select a hardware or virtual
+          output. In your DAW, receive that port on the channel assigned to each
+          source. Match the pitch-bend range on both ends (the default is ±2
+          semitones). <b>Sound off</b> mutes the browser sine tones while MIDI
+          playback continues.
+        </p>
+        <p>
+          <b>Share setup → Copy link</b> saves your instruments, partial links,
+          tuning references, MIDI channel assignments, selection and view in the
+          URL. An example or shared setup opens separately from the workspace
+          saved on your device.
+        </p>
+        <details>
+          <summary>Open a link saved before the repository moved</summary>
+          <p>
+            In an old setup URL, replace
+            <code>adrianartacho.github.io</code> with
+            <code>muk-labs.github.io</code>. Keep <code>/PolySpectra/</code> and
+            everything after it, including the query string.
+          </p>
+        </details>
+      </section>
+      <footer>
+        <a href="../">Open PolySpectra</a
+        ><a href="https://github.com/MUK-Labs/PolySpectra">GitHub repository</a>
+      </footer>
+    </main>
+  </body>
+</html>

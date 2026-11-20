@@ -94,6 +94,7 @@ globalThis.PolyWorkspace = (() => {
     p.set("partials", state.limit);
     p.set("tunings", state.systems.join(","));
     p.set("selected", indexes.get(state.selected.id) + "." + state.selected.n);
+    if (state.collapsedOverlay) p.set("overlay", "collapsed");
     if (state.fullscreen) p.set("fullscreen", "1");
     if (state.grouped) p.set("grouped", "1");
     if (state.bendRange && state.bendRange !== 2)
@@ -107,11 +108,13 @@ globalThis.PolyWorkspace = (() => {
     return url.href;
   }
   function fromURL(href, defaults) {
-    const p = new URL(href).searchParams;
-    if (!["setup", "a4", "fullscreen", "src", "link"].some((k) => p.has(k)))
-      return p.get("example") === "quarter-tone-pianos"
-        ? pianoExample(defaults)
-        : null;
+    let p = new URL(href).searchParams;
+    if (!["setup", "a4", "fullscreen", "src", "link"].some((k) => p.has(k))) {
+      if (p.get("example") === "quarter-tone-pianos")
+        return pianoExample(defaults);
+      if (p.get("example") !== "linked-strings") return null;
+      p = linkedStringsParameters();
+    }
     const bad = () => {
       throw Error(
         "This setup URL contains an unsupported or incomplete setting.",
@@ -194,6 +197,7 @@ globalThis.PolyWorkspace = (() => {
         ? { id: s.sources[0].id, n: 1 }
         : s.selected;
     if (s.selected.n > s.limit) bad();
+    s.collapsedOverlay = p.get("overlay") === "collapsed";
     s.fullscreen = p.get("fullscreen") === "1";
     s.grouped = p.get("grouped") === "1";
     s.bendRange = p.has("bend") ? Number(p.get("bend")) : 2;
@@ -217,6 +221,40 @@ globalThis.PolyWorkspace = (() => {
       channels.every((c) => Number.isInteger(c) && c >= 0 && c <= 16) &&
       new Set(active).size === active.length
     );
+  }
+  // This shared setup uses the same decoder as a pasted session URL.
+  function linkedStringsParameters() {
+    const p = new URLSearchParams({
+      setup: "1",
+      a4: "440",
+      channels: "1,2,3,4,7,5",
+      view: "map",
+      partials: "32",
+      tunings: "31",
+      selected: "5.1",
+      fullscreen: "1",
+      lanes: "1",
+      camera: "10242.457097218572,6359.1640720280375",
+    });
+    const rows = [
+      ["String IV", 65.18518518518518, "Strings", "#b197de", "strings"],
+      ["String III", 97.77777777777777, "Strings", "#b197de", "source"],
+      ["String II", 146.66666666666666, "", "#b197de", "source"],
+      ["String I", 220, "", "#b197de", "source"],
+      [
+        "Keyboard",
+        440,
+        "",
+        "#7ea8d7",
+        "source",
+        { offset: 0, start: 0, divisions: 12 },
+      ],
+      ["Horn in F", 43.456790123456784, "Brass", "#e49865", "brass"],
+    ];
+    for (const row of rows) p.append("src", JSON.stringify(row));
+    for (const link of ["4.2-3.3", "3.2-2.3", "2.2-1.3", "5.1-4.2", "1.2-6.3"])
+      p.append("link", link);
+    return p;
   }
   function pianoExample(defaults) {
     const setup = structuredClone(defaults);

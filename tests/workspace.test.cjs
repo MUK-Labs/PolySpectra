@@ -73,6 +73,7 @@ test("shared setups restore order, Unicode, directed links, selection, precision
     links,
     a: 442,
     fullscreen: true,
+    collapsedOverlay: true,
     muted: true,
     grouped: true,
     mapRefs: true,
@@ -97,6 +98,7 @@ test("shared setups restore order, Unicode, directed links, selection, precision
   for (const key of [
     "a",
     "fullscreen",
+    "collapsedOverlay",
     "muted",
     "grouped",
     "mapRefs",
@@ -128,4 +130,57 @@ test("basic pitch and fullscreen can be set directly; invalid shared input never
     assert.throws(() => fromURL(base + query, defaults));
   assert.equal(defaults.a, 440);
   assert.equal(defaults.sources[1].f, 220);
+});
+
+test("the linked ensemble preserves its six sources, directed unisons, routing and saved view", () => {
+  const url = "https://example.org/PolySpectra/?example=linked-strings";
+  const s = fromURL(url, defaults);
+  assert.deepEqual(
+    s.sources.map((x) => x.name),
+    [
+      "String IV",
+      "String III",
+      "String II",
+      "String I",
+      "Keyboard",
+      "Horn in F",
+    ],
+  );
+  assert.deepEqual(
+    s.sources.map((x) => x.channel),
+    [1, 2, 3, 4, 7, 5],
+  );
+  assert.deepEqual(s.sources[4].scale, { offset: 0, start: 0, divisions: 12 });
+  assert.equal(s.limit, 32);
+  assert.equal(s.fullscreen, true);
+  assert.equal(s.mapRefs, true);
+  assert.deepEqual(s.systems, ["31"]);
+  assert.deepEqual(s.selected, { id: s.sources[4].id, n: 1 });
+  assert.deepEqual(s.mapCamera, {
+    center: 10242.457097218572,
+    span: 6359.1640720280375,
+  });
+  const shared = shareURL(s, url),
+    query = new URL(shared).searchParams;
+  assert.deepEqual(query.getAll("link"), [
+    "4.2-3.3",
+    "3.2-2.3",
+    "2.2-1.3",
+    "5.1-4.2",
+    "1.2-6.3",
+  ]);
+  assert.deepEqual(fromURL(shared, defaults), s);
+  s.sources[4].f = 442;
+  const tuned = resolve(s.sources, s.links);
+  assert.equal(tuned[3].f, 221);
+  for (const l of s.links) {
+    const origin = tuned.find((x) => x.id === l.from),
+      dest = tuned.find((x) => x.id === l.to);
+    assert.ok(
+      Math.abs(
+        AtlasPitch.frequency(origin, l.fromN) -
+          AtlasPitch.frequency(dest, l.toN),
+      ) < 1e-10,
+    );
+  }
 });

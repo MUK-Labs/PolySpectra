@@ -127,6 +127,7 @@
     mapRefs: false,
     links: [],
     fullscreen: false,
+    collapsedOverlay: false,
     grouped: false,
     muted: false,
     selected: { id: "cello", n: 3 },
@@ -210,7 +211,9 @@
   midi.range = state.bendRange;
   $("bend-range").value = state.bendRange;
   const exampleURL =
-    new URL(location.href).search === "?example=quarter-tone-pianos"
+    sharedSession &&
+    new URL(location.href).searchParams.size === 1 &&
+    new URL(location.href).searchParams.has("example")
       ? location.href
       : null;
   const exampleSetup = exampleURL ? W.shareURL(state, location.href) : null;
@@ -420,6 +423,7 @@
             : "Play partial");
   }
   function drawChart() {
+    if (state.collapsedOverlay) return;
     const box = $("chart"),
       w = Math.max(200, box.clientWidth),
       h = box.clientHeight,
@@ -633,10 +637,62 @@
     );
   }
   const M = globalThis.PitchMap;
-  const mapHeight = () =>
-    state.fullscreen
-      ? Math.max(330, Math.round(window.innerHeight * 0.68))
-      : Math.max(320, Math.min(510, Math.round(window.innerHeight * 0.51)));
+  let laneHeight = 360;
+  const mapHeight = () => laneHeight;
+  let layoutFrame = 0;
+  function scheduleWorkspaceSize() {
+    if (layoutFrame) return;
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = 0;
+      const sheet = $("matrix-scroll"),
+        area = sheet.closest(".work-area");
+      const main = area.closest("main");
+      const height = window.visualViewport?.height ?? window.innerHeight;
+      const footer = main.querySelector("footer"),
+        foot = area.querySelector(".matrix-foot");
+      const stacked = window.matchMedia("(max-width:850px)").matches;
+      const footerSpace =
+        !stacked && footer.offsetHeight
+          ? footer.offsetHeight + parseFloat(getComputedStyle(footer).marginTop)
+          : 0;
+      const bottom =
+        height -
+        footerSpace -
+        (stacked ? 8 : parseFloat(getComputedStyle(main).paddingBottom));
+      const available =
+        bottom -
+        (sheet.getBoundingClientRect().top + window.scrollY) -
+        foot.offsetHeight -
+        parseFloat(getComputedStyle(foot).marginTop);
+      area.style.setProperty(
+        "--sheet-height",
+        Math.max(
+          stacked ? Math.round(height * 0.58) : 238,
+          Math.floor(available),
+        ) + "px",
+      );
+      const inspectorSpace =
+        bottom - (area.getBoundingClientRect().top + window.scrollY);
+      area.style.setProperty(
+        "--inspector-height",
+        Math.max(250, Math.floor(inspectorSpace)) + "px",
+      );
+      if (state.view === "map" && $("matrix").tHead) {
+        const height = Math.max(
+          80,
+          Math.floor(
+            sheet.clientHeight -
+              $("matrix").tHead.getBoundingClientRect().height,
+          ),
+        );
+        if (height !== laneHeight) {
+          laneHeight = height;
+          redrawMap();
+        }
+      }
+      scheduleCords();
+    });
+  }
   const mapUnit = () => state.mapUnit;
   const mapExtent = () => M.extent(state.sources, state.limit, mapUnit());
   function mapCamera() {
@@ -685,6 +741,18 @@
       }) + "×";
     $("zoom-readout").textContent = magnitude;
     $("zoom-range").setAttribute("aria-valuetext", magnitude);
+    const travel = full.span - camera.span;
+    const pos = travel > 0 ? (camera.center - full.center) / travel + 0.5 : 0.5;
+    const fit = travel <= full.span * 1e-9;
+    $("pan-position").value = Math.round(10000 * pos);
+    $("pan-position").disabled = fit;
+    $("pan-position").setAttribute(
+      "aria-valuetext",
+      fit ? "Full range" : Math.round(pos * 100) + "% from lowest position",
+    );
+    $("pan-up").disabled = fit || pos >= 1 - 1e-12;
+    $("pan-down").disabled = fit || pos <= 1e-12;
+    $("matrix-scroll").classList.toggle("at-fit", fit);
     $("zoom-out").disabled = factor < 1.000001;
     $("zoom-in").disabled = camera.span <= M.minSpan(mapUnit()) * 1.000001;
     $("frame-pair").disabled = state.sources.length < 2;
@@ -706,7 +774,7 @@
           " " +
           P.degree(selected(), state.selected.n)
         : "") +
-      " · Drag to pan · Pinch or Ctrl/⌘-scroll to zoom";
+      " · Pinch or Ctrl/⌘-scroll to zoom";
   }
   function pitchMarkLane(marks, guides, selectedY, camera, source) {
     // Labels can thin out independently; every mark keeps its physical position.
@@ -887,6 +955,33 @@
   }
   $("zoom-in").onclick = () => selectionZoom(mapCamera().span / 2);
   $("zoom-out").onclick = () => selectionZoom(mapCamera().span * 2);
+  function panBy(amount) {
+    const current = mapCamera();
+    const next = M.constrain(
+      current.center + amount * current.span,
+      current.span,
+      mapExtent(),
+      mapUnit(),
+    );
+    if (next.center === current.center) return false;
+    updateCamera(next);
+    return true;
+  }
+  $("pan-up").onclick = () => panBy(0.8);
+  $("pan-down").onclick = () => panBy(-0.8);
+  $("pan-position").oninput = (e) => {
+    const full = mapExtent(),
+      c = mapCamera();
+    const fraction = Number(e.target.value) / 10000 - 0.5;
+    updateCamera(
+      M.constrain(
+        full.center + fraction * (full.span - c.span),
+        c.span,
+        full,
+        mapUnit(),
+      ),
+    );
+  };
   $("fit-map").onclick = () => updateCamera(mapExtent());
   $("frame-pair").onclick = framePair;
   $("zoom-range").oninput = (e) => {
@@ -1023,19 +1118,23 @@
   surface.addEventListener(
     "wheel",
     (e) => {
-      if (
-        state.view !== "map" ||
-        !(e.ctrlKey || e.metaKey) ||
-        !e.target.closest(".map-lane")
-      )
-        return;
-      e.preventDefault();
+      if (state.view !== "map" || !e.target.closest(".map-lane")) return;
       const rect = surface.tBodies[0].getBoundingClientRect(),
         location = (e.clientY - rect.top) / rect.height,
         camera = mapCamera();
       const dy =
         e.deltaY *
         (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? rect.height : 1);
+      if (!(e.ctrlKey || e.metaKey)) {
+        if (
+          !e.shiftKey &&
+          Math.abs(e.deltaY) > Math.abs(e.deltaX) &&
+          panBy(-dy / rect.height)
+        )
+          e.preventDefault();
+        return;
+      }
+      e.preventDefault();
       updateCamera(
         M.zoom(
           camera,
@@ -1057,7 +1156,8 @@
       refs = (byMap ? state.mapRefs : byPitch && state.refColumns)
         ? state.systems
         : [];
-    $("map-tools").hidden = !byMap;
+    $("map-tools").hidden = $("pan-rail").hidden = !byMap;
+    scheduleWorkspaceSize();
     $("matrix-scroll").classList.toggle("map-mode", byMap);
     $("matrix-scroll").tabIndex = byMap ? 0 : -1;
     const matrix = $("matrix");
@@ -1302,7 +1402,7 @@
       icon("focus") +
       "<h2>" +
       (s.scale ? "Pitch inspector" : "Partial inspector") +
-      '</h2></div><div class="readout"><span class="source-label"><span class="dot" style="--c:' +
+      '</h2><a class="phone-jump" href="#matrix-scroll">Back to pitches</a></div><div class="readout"><span class="source-label"><span class="dot" style="--c:' +
       s.color +
       '"></span>' +
       esc(s.name) +
@@ -1593,7 +1693,16 @@
   }
   new ResizeObserver(scheduleCords).observe($("matrix"));
 
+  $("toggle-overlay").onclick = () => {
+    state.collapsedOverlay = !state.collapsedOverlay;
+    render();
+  };
   function displayLayout() {
+    $("chart").hidden = $("chart-foot").hidden = !!state.collapsedOverlay;
+    $("toggle-overlay").setAttribute("aria-expanded", !state.collapsedOverlay);
+    $("overlay-action").textContent = state.collapsedOverlay
+      ? "Expand"
+      : "Collapse";
     document.documentElement.classList.toggle(
       "expanded-workspace",
       state.fullscreen,
@@ -2224,17 +2333,8 @@
       ["PageUp", "PageDown", "Home"].includes(e.key)
     ) {
       e.preventDefault();
-      const c = mapCamera();
-      updateCamera(
-        e.key === "Home"
-          ? mapExtent()
-          : M.constrain(
-              c.center + (e.key === "PageUp" ? 1 : -1) * c.span * 0.8,
-              c.span,
-              mapExtent(),
-              mapUnit(),
-            ),
-      );
+      if (e.key === "Home") updateCamera(mapExtent());
+      else panBy(e.key === "PageUp" ? 0.8 : -0.8);
       return;
     }
     let { id, n } = state.selected;
@@ -2260,9 +2360,15 @@
     e.preventDefault();
     choose(id, n, true);
   });
+  const layoutObserver = new ResizeObserver(scheduleWorkspaceSize);
+  for (const el of document.querySelectorAll(
+    ".overview,.workspace-toolbar,#map-tools,#link-picking,.matrix-foot,main footer,#matrix-scroll",
+  ))
+    layoutObserver.observe(el);
+  window.visualViewport?.addEventListener("resize", scheduleWorkspaceSize);
   window.addEventListener("resize", () => {
     drawChart();
-    redrawMap();
+    scheduleWorkspaceSize();
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) clearAudio();
