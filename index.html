@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#163d34" />
+    <title>PolySpectra · Spectrum workspace</title>
+    <link rel="icon" href="./mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./pitch.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="top-inner">
+        <div class="brand">
+          <img src="./mark.svg" width="35" height="35" alt="" />PolySpectra
+        </div>
+        <nav aria-label="Workspace tools">
+          <button id="sound" class="quiet"></button
+          ><span class="nav-divider"></span
+          ><button id="help" class="quiet">
+            <i data-icon="keyboard"></i><span>Shortcuts</span>
+          </button>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section class="page-heading">
+        <div>
+          <h1>Spectrum workspace</h1>
+          <p>
+            Compare natural harmonics across instruments and tuning systems.
+          </p>
+        </div>
+        <div class="actions">
+          <button id="tuning"><i data-icon="tuning"></i>Tuning</button
+          ><button id="add" class="primary">
+            <i data-icon="plus"></i>Add source
+          </button>
+        </div>
+      </section>
+      <section class="overview panel" aria-labelledby="overlay-title">
+        <div class="chart-head">
+          <h2 id="overlay-title"><i data-icon="wave"></i>Spectrum overlay</h2>
+          <div id="legend" class="legend"></div>
+        </div>
+        <div
+          id="chart"
+          aria-label="Interactive harmonic frequencies on a logarithmic axis"
+        ></div>
+        <div class="chart-foot">
+          <span>Frequency (Hz)</span><span>Logarithmic scale</span>
+        </div>
+      </section>
+      <div class="work-area">
+        <section class="matrix-section" aria-labelledby="matrix-title">
+          <div class="section-tools">
+            <div class="section-title">
+              <h2 id="matrix-title">Partial matrix</h2>
+              <span id="count" class="count"></span>
+            </div>
+            <div class="matrix-actions">
+              <div class="segmented" aria-label="Row arrangement">
+                <button id="by-partial">By partial</button
+                ><button id="by-pitch">By pitch</button>
+              </div>
+              <select id="limit" aria-label="Number of partials">
+                <option value="8">8 partials</option>
+                <option value="12">12 partials</option>
+                <option value="16">16 partials</option>
+                <option value="24">24 partials</option>
+                <option value="32">32 partials</option>
+              </select>
+            </div>
+          </div>
+          <div
+            id="matrix-scroll"
+            class="matrix-scroll"
+            role="region"
+            aria-label="Playable partial matrix"
+          >
+            <table id="matrix"></table>
+          </div>
+          <div class="matrix-foot">
+            <span id="view-note"></span
+            ><button id="groups" class="text-action">
+              <i data-icon="group"></i><span>Group sources</span>
+            </button>
+          </div>
+        </section>
+        <aside
+          id="inspector"
+          class="panel"
+          aria-label="Partial inspector"
+        ></aside>
+      </div>
+      <footer>
+        <span><i data-icon="cursor"></i>Click a partial to hear it</span
+        ><span><kbd>↑</kbd><kbd>↓</kbd> Move through a series</span
+        ><span id="save-status"></span>
+      </footer>
+    </main>
+    <dialog id="source-dialog" aria-labelledby="source-title">
+      <form id="source-form">
+        <div class="dialog-title">
+          <h2 id="source-title">Add source</h2>
+          <button class="icon close" type="button" aria-label="Close">
+            <i data-icon="x"></i>
+          </button>
+        </div>
+        <label
+          >Starting point<select id="preset">
+            <option value="custom">Custom source</option>
+            <option value="cello">Cello · open C</option>
+            <option value="horn">Horn in F · open tubing</option>
+            <option value="violin">Violin · open G</option>
+            <option value="bass">Double bass · open E</option>
+            <option value="trumpet">B♭ trumpet · open tubing</option>
+          </select></label
+        >
+        <label
+          >Source name<input id="source-name" required maxlength="40"
+        /></label>
+        <div class="form-row">
+          <label
+            >Sounding fundamental <span>(Hz)</span
+            ><input
+              type="number"
+              id="frequency"
+              required
+              min="8"
+              max="4000"
+              step="any" /></label
+          ><label
+            >Group<input
+              id="group-name"
+              list="group-names"
+              maxlength="32"
+              placeholder="e.g. Strings"
+          /></label>
+        </div>
+        <datalist id="group-names"></datalist>
+        <fieldset>
+          <legend>Column color</legend>
+          <div id="colors"></div>
+        </fieldset>
+        <div id="arrange"></div>
+        <div class="dialog-actions">
+          <button type="button" class="cancel">Cancel</button
+          ><button class="primary" id="source-save">Add source</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="tuning-dialog" aria-label="Tuning references">
+      <form id="tuning-form">
+        <div class="dialog-title">
+          <h2>Tuning references</h2>
+          <button class="icon close" type="button" aria-label="Close">
+            <i data-icon="x"></i>
+          </button>
+        </div>
+        <label
+          >Concert A4 <span>(Hz)</span
+          ><input
+            type="number"
+            id="concert"
+            min="300"
+            max="600"
+            step="any"
+            required
+        /></label>
+        <fieldset>
+          <legend>Compare against</legend>
+          <div id="systems" class="system-list"></div>
+        </fieldset>
+        <label class="check"
+          ><input type="checkbox" id="ref-columns" />Show tuning columns in “By
+          pitch”</label
+        >
+        <p class="form-note">
+          References share A4. Changing a reference keeps every source at its
+          entered frequency.
+        </p>
+        <div class="dialog-actions">
+          <button type="button" class="cancel">Cancel</button
+          ><button class="primary">Apply tuning</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="help-dialog" aria-label="Playing PolySpectra">
+      <div class="dialog-title">
+        <h2>Playing PolySpectra</h2>
+        <button class="icon close" aria-label="Close">
+          <i data-icon="x"></i>
+        </button>
+      </div>
+      <dl class="help-list">
+        <div>
+          <dt>Higher / lower partial</dt>
+          <dd><kbd>↑</kbd> <kbd>↓</kbd></dd>
+        </div>
+        <div>
+          <dt>Adjacent source</dt>
+          <dd><kbd>←</kbd> <kbd>→</kbd></dd>
+        </div>
+        <div>
+          <dt>Replay selection</dt>
+          <dd><kbd>Space</kbd></dd>
+        </div>
+        <div>
+          <dt>Stop sound / close dialog</dt>
+          <dd><kbd>Esc</kbd></dd>
+        </div>
+      </dl>
+      <p>
+        Select a cell or a peak to hear its exact frequency. Use the inspector
+        to play a nearby partial together with it.
+      </p>
+      <p>
+        Drag a column header to reorder it, or use the move controls in its
+        settings. Group names can be edited there too.
+      </p>
+      <p>
+        In Tuning comparison, positive cents mean the selected partial is sharp
+        of the reference. EDO steps count from A4. In Closest partials, positive
+        cents mean the other source is higher. Click either comparison to hear
+        both tones for six seconds.
+      </p>
+      <p class="form-note">
+        Each source uses the ideal harmonic series, fₙ = n × f₁. Peak heights
+        are illustrative. All playback uses sine tones at sounding pitch.
+      </p>
+    </dialog>
+    <div id="announce" class="sr" role="status" aria-live="polite"></div>
+  </body>
+</html>
