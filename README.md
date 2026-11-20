@@ -61,4 +61,4 @@ For a fork, choose **Settings → Pages → Deploy from a branch**, select the b
 
 Run pitch checks with `node --test tests/*.cjs`.
 
-## [ToDo](https://trello.com/c/solmfeZ9/130-polyspectra)
+## [📝 ToDo](https://trello.com/c/solmfeZ9/130-polyspectra)
