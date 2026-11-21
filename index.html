@@ -6,12 +6,12 @@
     <meta name="theme-color" content="#163d34" />
     <title>PolySpectra · Spectrum workspace</title>
     <link rel="icon" href="./mark.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./style.css?v=tall-table" />
+    <link rel="stylesheet" href="./style.css?v=midi-input" />
     <script defer src="./pitch.js?v=tempered-midi"></script>
     <script defer src="./pitch-map.js?v=tempered-midi"></script>
-    <script defer src="./workspace.js?v=adaptive-guide"></script>
-    <script defer src="./midi.js?v=tempered-midi"></script>
-    <script defer src="./app.js?v=tall-table"></script>
+    <script defer src="./workspace.js?v=midi-input"></script>
+    <script defer src="./midi.js?v=midi-input"></script>
+    <script defer src="./app.js?v=midi-input"></script>
   </head>
   <body>
     <main>
@@ -66,8 +66,8 @@
           </select>
         </div>
         <nav class="utility-tools" aria-label="Workspace tools">
-          <button id="midi" title="MIDI output and source channels">
-            MIDI out
+          <button id="midi" title="MIDI input, output and source channels">
+            MIDI I/O
           </button>
           <button
             id="sound"
@@ -318,25 +318,24 @@
     </dialog>
     <dialog id="midi-dialog" aria-labelledby="midi-title">
       <div class="dialog-title">
-        <h2 id="midi-title">MIDI output</h2>
+        <h2 id="midi-title">MIDI input and output</h2>
         <button class="icon close" aria-label="Close">
           <i data-icon="x"></i>
         </button>
       </div>
-      <p class="form-note">
-        Choose a hardware or virtual MIDI port. Assign your receiving
-        instruments to the channels below.
-      </p>
       <button id="midi-connect" class="primary">Connect MIDI</button>
       <p id="midi-status" class="form-note" role="status"></p>
       <div class="form-row">
+        <label>Input port<select id="midi-in-port"><option value="">Off</option></select></label>
         <label
           >Output port<select id="midi-port">
             <option value="">Off</option>
           </select></label
         >
+      </div>
+      <div class="form-row">
         <label
-          >Pitch-bend range<select id="bend-range">
+          >Output pitch-bend range<select id="bend-range">
             <option value="1">±1 semitone</option>
             <option value="2" selected>±2 semitones</option>
             <option value="3">±3 semitones</option>
@@ -350,10 +349,11 @@
         Match this range in your virtual instruments. Turn off the toolbar’s
         Sound button to hear only MIDI playback.
       </p>
-      <fieldset>
-        <legend>Source channels</legend>
-        <div id="midi-routes"></div>
-      </fieldset>
+      <p class="form-note">
+        The first key plays P01 (the fundamental) or the first displayed scale step.
+        Each semitone up plays the next row. Hold the key to sustain it.
+      </p>
+      <div id="midi-routes"></div>
       <div class="dialog-actions"><button class="close">Done</button></div>
     </dialog>
     <dialog id="tuning-dialog" aria-label="Tuning references">
@@ -482,7 +482,8 @@
       <p class="form-note">
         Harmonic sources use fₙ = n × f₁. Tempered instruments repeat their
         scale each octave. Peak heights are illustrative. The browser plays sine
-        tones. MIDI out sends each source’s sounding pitch to its assigned
+        tones. A MIDI input can play successive rows from a keyboard.
+        MIDI out sends each source’s sounding pitch to its assigned
         channel.
       </p>
       <p>

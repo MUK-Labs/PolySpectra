@@ -1561,15 +1561,29 @@ main {
   color: #225744;
   font-size: 0.85rem;
 }
-#midi-routes label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 6px 0;
+#midi-dialog {
+  width: min(510px, calc(100% - 28px));
 }
-#midi-routes select {
-  margin-left: auto;
-  width: 7em;
+#midi-routes fieldset {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  margin: 16px 0 0;
+}
+#midi-routes legend {
+  padding-right: 8px;
+}
+.midi-route {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 1fr;
+  gap: 8px;
+}
+.midi-route label {
+  min-width: 0;
+}
+@media (max-width: 420px) {
+  #midi-dialog { padding: 14px; }
+  .midi-route { gap: 5px; }
+  .midi-route select { padding-left: 3px; padding-right: 2px; }
 }
 #midi-dialog select {
   max-width: 100%;

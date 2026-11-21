@@ -145,6 +145,8 @@
           (x) =>
             typeof x.name === "string" &&
             typeof x.group === "string" &&
+            (x.inputChannel == null || (Number.isInteger(x.inputChannel) && x.inputChannel >= 0 && x.inputChannel <= 16)) &&
+            (x.baseKey == null || (Number.isInteger(x.baseKey) && x.baseKey >= 0 && x.baseKey <= 127)) &&
             /^[\w-]+$/.test(x.id) &&
             x.f >= 8 &&
             x.f <= 4000 &&
@@ -299,119 +301,115 @@
       toastTimer = setTimeout(() => ($("announce").className = "sr"), 3200);
     }
   }
-  let context,
-    voices = [],
-    playing = false,
-    audioSeq = 0,
-    midiTimer,
-    endTimer;
-  function clearAudio() {
-    audioSeq++;
-    clearTimeout(midiTimer);
-    midi.stop();
-    clearTimeout(endTimer);
-    for (const v of voices) {
+  let context;
+  const sounding = new Set();
+  const input = new globalThis.AtlasMIDI.Input(triggerPartial);
+  async function readyAudio() {
+    context ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (context.state !== "running") await context.resume();
+    return context;
+  }
+  function stopSine(voice) {
+    if (!voice.osc) return;
+    const t = context.currentTime;
+    voice.gain.gain.cancelScheduledValues(t);
+    voice.gain.gain.setTargetAtTime(0.0001, t, 0.012);
+    voice.osc.stop(t + 0.055);
+    voice.osc = null;
+  }
+  function stopVoice(voice) {
+    if (!sounding.delete(voice)) return;
+    clearTimeout(voice.timer);
+    stopSine(voice);
+    if (voice.sent) {
       try {
-        const t = context.currentTime;
-        v.gain.gain.cancelScheduledValues(t);
-        v.gain.gain.setTargetAtTime(0.0001, t, 0.012);
-        v.osc.stop(t + 0.055);
-      } catch {}
+        midi.release(voice.channel);
+      } catch {
+        /* The output may have been unplugged while this key was held. */
+      }
     }
-    voices = [];
-    playing = false;
     refreshPlay();
   }
-  async function play(freqs, duration = 1.3, ids = []) {
-    clearAudio();
-    if (midi.port) {
-      try {
-        ids.forEach((id, i) => {
-          const source = getSource(id);
-          if (source?.channel && !midi.start(source.channel, freqs[i]))
-            announce(
-              "This frequency is outside the configured MIDI pitch range.",
-              true,
-            );
-        });
-        if (midi.active.size) {
-          playing = true;
-          refreshPlay();
-          midiTimer = setTimeout(() => {
-            midi.stop();
-            if (!voices.length) {
-              playing = false;
-              refreshPlay();
-            }
-          }, duration * 1000);
-        }
-      } catch {
-        midi.route(null, midi.range);
-        refreshMIDIPorts();
-        announce("MIDI output disconnected.", true);
-      }
-    }
-    if (state.muted) {
-      if (!playing)
-        announce(
-          "Browser sound is off. Turn it on or route this source in MIDI out.",
-          true,
-        );
-      return;
-    }
-    const seq = audioSeq;
+  function clearAudio() {
+    input.stop();
+    for (const voice of sounding) stopVoice(voice);
+  }
+  async function soundSine(voice, frequency, level, duration) {
     try {
-      context ??= new (window.AudioContext || window.webkitAudioContext)();
-      if (context.state !== "running") await context.resume();
-      if (seq !== audioSeq) return;
-      if (
-        freqs.some(
-          (f) => f >= Math.min(20000, context.sampleRate / 2) || f < 20,
-        )
-      ) {
-        announce(
-          "This pitch is outside the browser’s 20 Hz–20 kHz playback range.",
-          true,
-        );
+      const ctx = await readyAudio();
+      if (!sounding.has(voice) || state.muted) return;
+      if (frequency < 20 || frequency >= Math.min(20000, ctx.sampleRate / 2)) {
+        announce("This pitch is outside the browser’s 20 Hz–20 kHz playback range.", true);
+        if (!voice.sent) stopVoice(voice);
         return;
       }
-      const t = context.currentTime;
-      for (const f of freqs) {
-        const osc = context.createOscillator(),
-          gain = context.createGain();
-        osc.type = "sine";
-        osc.frequency.value = f;
-        gain.gain.setValueAtTime(0.0001, t);
-        gain.gain.exponentialRampToValueAtTime(0.13 / freqs.length, t + 0.022);
-        gain.gain.setValueAtTime(0.13 / freqs.length, t + duration - 0.12);
+      const t = ctx.currentTime, osc = ctx.createOscillator(), gain = ctx.createGain();
+      osc.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, t);
+      gain.gain.exponentialRampToValueAtTime(level, t + 0.022);
+      if (duration) {
+        gain.gain.setValueAtTime(level, t + duration - 0.12);
         gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
-        osc.connect(gain);
-        gain.connect(context.destination);
-        osc.onended = () => {
-          osc.disconnect();
-          gain.disconnect();
-        };
-        osc.start(t);
-        osc.stop(t + duration + 0.01);
-        voices.push({ osc, gain });
       }
-      playing = true;
-      refreshPlay();
-      endTimer = setTimeout(
-        () => {
-          if (seq === audioSeq) {
-            playing = false;
-            voices = [];
-            refreshPlay();
-          }
-        },
-        duration * 1000 + 30,
-      );
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.onended = () => {
+        osc.disconnect();
+        gain.disconnect();
+      };
+      osc.start();
+      voice.osc = osc;
+      voice.gain = gain;
     } catch {
+      if (!voice.sent) stopVoice(voice);
       announce("Browser audio could not start on this device.", true);
     }
   }
+  function startTone(source, frequency, velocity, level, duration) {
+    // A source owns one bend channel. Release its previous voice before rebending it.
+    if (source) {
+      for (const old of sounding)
+        if (old.sourceId === source.id) stopVoice(old);
+    }
+    const voice = { sourceId: source?.id, channel: source?.channel, duration };
+    const stop = () => stopVoice(voice);
+    if (midi.port && voice.channel) {
+      try {
+        voice.sent = midi.start(voice.channel, frequency, velocity);
+        if (!voice.sent)
+          announce("This frequency is outside the configured MIDI pitch range.", true);
+      } catch {
+        refreshMIDIPorts();
+        announce("The MIDI output could not play this note.", true);
+      }
+    }
+    if (state.muted && !voice.sent) return stop;
+    sounding.add(voice);
+    if (!state.muted) soundSine(voice, frequency, level, duration);
+    if (duration) voice.timer = setTimeout(stop, duration * 1000);
+    refreshPlay();
+    return stop;
+  }
+  function play(freqs, duration = 1.3, ids = []) {
+    for (const voice of sounding)
+      if (voice.duration) stopVoice(voice);
+    freqs.forEach((f, i) => startTone(getSource(ids[i]), f, 88, 0.13 / freqs.length, duration));
+    if (state.muted && !sounding.size)
+      announce("Turn on browser sound or select a MIDI output for this source.", true);
+  }
+  let midiFrame = 0;
+  function triggerPartial(source, n, velocity) {
+    const stop = startTone(source, P.frequency(source, n), velocity, 0.13 * velocity / 127);
+    state.selected = { id: source.id, n };
+    if (!midiFrame)
+      midiFrame = requestAnimationFrame(() => {
+        midiFrame = 0;
+        render();
+      });
+    return stop;
+  }
   function refreshPlay() {
+    const playing = sounding.size > 0;
     const button = $("play");
     if (button)
       button.innerHTML =
@@ -1940,55 +1938,93 @@
       .join("");
     $("tuning-dialog").showModal();
   }
-  let midiAccess;
+  let midiAccess, inputPort = null;
+  function routeSelect(source, field, title, options, value) {
+    const label = document.createElement("label");
+    const select = document.createElement("select");
+    select.dataset.route = source.id;
+    select.dataset.field = field;
+    select.setAttribute("aria-label", source.name + " " + title);
+    select.replaceChildren(...options);
+    select.value = value;
+    label.append(title, select);
+    return label;
+  }
+  function channelOptions() {
+    return Array.from({ length: 16 }, (_, i) => new Option(String(i + 1), i + 1));
+  }
   function drawRoutes() {
     $("midi-routes").replaceChildren(
       ...sources().map((s) => {
-        const label = document.createElement("label"),
-          select = document.createElement("select");
-        label.append(document.createTextNode(s.name), select);
-        select.dataset.route = s.id;
-        select.add(new Option("Off", 0));
-        for (let ch = 1; ch <= 16; ch++) {
-          const option = new Option("Channel " + ch, ch);
-          option.disabled = state.sources.some(
-            (o) => o.id !== s.id && o.channel === ch,
-          );
-          select.add(option);
-        }
-        select.value = s.channel;
-        return label;
+        const row = document.createElement("fieldset");
+        const name = document.createElement("legend");
+        name.textContent = s.name;
+        const controls = document.createElement("div");
+        controls.className = "midi-route";
+        const outputs = channelOptions();
+        for (const opt of outputs)
+          opt.disabled = state.sources.some((o) => o.id !== s.id && o.channel === Number(opt.value));
+        controls.append(
+          routeSelect(s, "inputChannel", "In channel",
+            [new Option("Follow out", "auto"), new Option("Off", 0), ...channelOptions()], s.inputChannel ?? "auto"),
+          routeSelect(s, "baseKey", "First key",
+            Array.from({ length: 128 }, (_, key) => new Option(key + " · " + P.note(key), key)), s.baseKey ?? 60),
+          routeSelect(s, "channel", "Out channel", [new Option("Off", 0), ...outputs], s.channel),
+        );
+        row.append(name, controls);
+        return row;
       }),
     );
   }
-  function refreshMIDIPorts() {
-    const ports = Array.from(midiAccess?.outputs.values() ?? []).filter(
-      (p) => p.state !== "disconnected",
-    );
-    if (midi.port && !ports.includes(midi.port)) {
-      clearAudio();
-      midi.route(null, midi.range);
+  function setInput(port) {
+    if (inputPort === port) return;
+    if (inputPort) inputPort.onmidimessage = null;
+    input.stop();
+    inputPort = port;
+    if (port) {
+      port.onmidimessage = (e) => {
+        if (inputPort === port) input.receive(e.data, state.sources, state.limit);
+      };
     }
-    const select = $("midi-port");
+  }
+  function connectedPorts(ports) {
+    return Array.from(ports?.values() ?? []).filter((p) => p.state !== "disconnected");
+  }
+  function showPorts(select, ports, active) {
     select.replaceChildren(
       new Option("Off", ""),
       ...ports.map((p) => new Option(p.name || p.id, p.id)),
     );
-    select.value = midi.port?.id ?? "";
+    select.value = active?.id ?? "";
     select.disabled = !ports.length;
+  }
+  function refreshMIDIPorts() {
+    const outputs = connectedPorts(midiAccess?.outputs);
+    const inputs = connectedPorts(midiAccess?.inputs);
+    if (midi.port && !outputs.includes(midi.port)) {
+      clearAudio();
+      midi.route(null, midi.range);
+    }
+    if (inputPort && !inputs.includes(inputPort)) setInput(null);
+    showPorts($("midi-port"), outputs, midi.port);
+    showPorts($("midi-in-port"), inputs, inputPort);
     $("midi-connect").hidden = !!midiAccess;
     $("midi-connect").disabled = !navigator.requestMIDIAccess;
     $("midi-status").textContent = !navigator.requestMIDIAccess
-      ? "Web MIDI is unavailable in this browser. Open PolySpectra in a Web MIDI-capable browser to connect an output."
+      ? "This browser does not support Web MIDI."
       : !midiAccess
         ? "Connect to list this device’s MIDI ports."
-        : !ports.length
-          ? "No outputs found. Open a virtual MIDI port or connect a device."
-          : midi.port
-            ? "Sending to " + (midi.port.name || "selected output") + "."
-            : "Choose an output to enable MIDI playback.";
-    $("midi").setAttribute("aria-pressed", !!midi.port);
+        : !inputs.length && !outputs.length
+          ? "No MIDI ports found. Connect a device or open a virtual port."
+          : "Choose an input, an output, or both.";
+    $("midi").setAttribute("aria-pressed", !!(midi.port || inputPort));
   }
+  $("midi-in-port").onchange = () => {
+    setInput(midiAccess?.inputs.get($("midi-in-port").value) ?? null);
+    if (inputPort && !state.muted) readyAudio().catch(() =>
+      announce("Browser audio could not start on this device.", true));
+    refreshMIDIPorts();
+  };
   $("midi").onclick = () => {
     refreshMIDIPorts();
     drawRoutes();
@@ -2022,15 +2058,15 @@
   }
   $("midi-port").onchange = $("bend-range").onchange = routeOutput;
   $("midi-routes").onchange = (e) => {
-    const s = getSource(e.target.dataset.route),
-      ch = Number(e.target.value);
-    if (
-      !s ||
-      (ch && state.sources.some((o) => o.id !== s.id && o.channel === ch))
-    )
-      return;
-    clearAudio();
-    s.channel = ch;
+    const s = getSource(e.target.dataset.route);
+    const field = e.target.dataset.field;
+    const value = e.target.value === "auto" ? null : Number(e.target.value);
+    if (!s || !["inputChannel", "channel", "baseKey"].includes(field)) return;
+    if (field === "channel" && value && state.sources.some((o) => o.id !== s.id && o.channel === value)) return;
+    input.release(s.id);
+    for (const voice of sounding)
+      if (voice.sourceId === s.id) stopVoice(voice);
+    s[field] = value;
     drawRoutes();
     render();
   };
@@ -2040,7 +2076,12 @@
   $("help").onclick = () => $("help-dialog").showModal();
   $("sound").onclick = () => {
     state.muted = !state.muted;
-    if (state.muted) clearAudio();
+    if (state.muted) {
+      for (const voice of sounding) {
+        if (voice.sent) stopSine(voice);
+        else stopVoice(voice);
+      }
+    }
     render();
   };
   $("preset").onchange = (e) => fillPreset(e.target.value);
@@ -2080,6 +2121,8 @@
       kind: formKind,
       ...(scale ? { scale } : {}),
       channel: editing ? getSource(editing).channel : nextChannel(),
+      inputChannel: editing ? getSource(editing).inputChannel : null,
+      baseKey: editing ? getSource(editing).baseKey : 60,
       color: formColor,
     };
     const next = editing
@@ -2228,7 +2271,7 @@
       return;
     }
     if (e.target.closest("#play")) {
-      if (playing) clearAudio();
+      if (sounding.size) clearAudio();
       else play([selectedHz()], 1.3, [state.selected.id]);
       return;
     }

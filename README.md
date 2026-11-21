@@ -25,11 +25,15 @@ The initial workspace contains cello C2, open horn in F, and violin G3. Select t
 
 In **Add source** choose a piano preset or change **Pitch series** to **Equal temperament (EDO)** or **Custom octave in cents**. Each instrument has its own reference in Hz, cent offset and first displayed step. For 12-EDO, step 0 is the instrument’s A4. For a full piano range, set the first step to −48 and choose **88 pitches** in the toolbar. Custom octaves use ascending cent values beginning at 0, with the octave inferred at 1200. Tempered instruments can be linked to harmonic partials and to one another. Share links preserve the scale and tuning.
 
-## MIDI output
+## MIDI input and output
 
-Open **MIDI out → Connect MIDI**, allow access, and choose your hardware or virtual output. Set your receiving instruments to the source channels shown in the dialog. Sources start on successive free channels. Assignments stay with each instrument when you move columns. Additional sources start with MIDI off once all 16 channels are in use. Free a channel by setting its source to **Off**.
+Open **MIDI I/O → Connect MIDI**, allow access, and choose your hardware or virtual output. Set your receiving instruments to the source channels shown in the dialog. Sources start on successive free channels. Assignments stay with each instrument when you move columns. Additional sources start with MIDI off once all 16 channels are in use. Free a channel by setting its source to **Off**.
 
 The default pitch-bend range is ±2 semitones. Match the instrument’s range to the setting in PolySpectra. It sends pitch-bend sensitivity (RPN 0), a 14-bit bend and a note-on, followed by note-off and a centered bend. Closest-pitch comparisons play the two source channels together. Reference lanes use the browser sine tone. **Sound off** mutes the browser while keeping MIDI available. Source channel assignments and the bend range travel with the setup URL. Output-device access is selected on the receiving computer.
+
+Choose an **Input port** to play the displayed rows from a keyboard or DAW. Each source’s **In channel** defaults to **Follow out** and can also be assigned independently or switched off. **First key** sets the zero offset. For a cello with first key 60 (C4), notes 60, 61 and 62 play P01, P02 and P03. A tempered source starts at its first displayed scale step. Keys outside the displayed rows are ignored.
+
+Hold a key to sustain the partial. Each source plays one pitch at a time so its bend stays independent. A new key replaces the previous one on that source. Different sources can sound together. The output uses the computed pitch and incoming velocity. For a DAW round trip, send controller notes to the PolySpectra input and receive the retuned notes on a separate virtual port. Share links save input channels and first keys. Choose the physical or virtual ports on each device.
 
 ## Link partials
 

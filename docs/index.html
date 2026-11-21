@@ -156,15 +156,31 @@
         <h2>MIDI and sharing</h2>
         <p>
           To hear your sample libraries, choose
-          <b>MIDI out → Connect MIDI</b> and select a hardware or virtual
+          <b>MIDI I/O → Connect MIDI</b> and select a hardware or virtual
           output. In your DAW, receive that port on the channel assigned to each
           source. Match the pitch-bend range on both ends (the default is ±2
           semitones). <b>Sound off</b> mutes the browser sine tones while MIDI
           playback continues.
         </p>
         <p>
+          To play a spectrum from a keyboard or DAW, select an <b>Input port</b>.
+          For the cello, set <b>In channel</b> to 1 and <b>First key</b> to
+          60 (C4). Play 60 for the fundamental (P01), 61 for the octave (P02)
+          and 62 for P03. Each higher key plays the next displayed partial.
+          On a tempered source the same keys play successive scale steps.
+        </p>
+        <p>
+          Hold a key to sustain its pitch and release it to stop. Each source
+          sounds its most recent key, so you can play several sources together
+          on different channels. <b>Follow out</b> makes a source listen on its
+          output channel. To use a sample library, send controller notes into
+          PolySpectra and receive its output on a separate DAW port. The
+          outgoing note and pitch bend give the partial’s sounding pitch and
+          the note carries your original velocity.
+        </p>
+        <p>
           <b>Share setup → Copy link</b> saves your instruments, partial links,
-          tuning references, MIDI channel assignments, selection and view in the
+          tuning references, MIDI channels, first keys, selection and view in the
           URL. An example or shared setup opens separately from the workspace
           saved on your device.
         </p>

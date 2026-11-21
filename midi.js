@@ -52,7 +52,7 @@ globalThis.AtlasMIDI = (() => {
         }
       }
     }
-    start(channel, frequency) {
+    start(channel, frequency, velocity = 88) {
       if (
         !this.port ||
         !Number.isInteger(channel) ||
@@ -77,10 +77,46 @@ globalThis.AtlasMIDI = (() => {
         this.configured.add(channel);
       }
       this.port.send([0xe0 + ch, data.bend & 127, data.bend >> 7]);
-      this.port.send([0x90 + ch, data.note, 88]);
+      this.port.send([0x90 + ch, data.note, velocity]);
       this.active.set(channel, data.note);
       return true;
     }
   }
-  return { encode, Output };
+  class Input {
+    constructor(trigger) {
+      this.trigger = trigger;
+      this.active = new Map();
+    }
+    release(id) {
+      const held = this.active.get(id);
+      if (!held) return;
+      this.active.delete(id);
+      held.stop();
+    }
+    stop() {
+      for (const id of this.active.keys()) this.release(id);
+    }
+    receive(data, sources, limit) {
+      if (!data || data.length !== 3) return;
+      const [status, key, velocity] = data;
+      const channel = (status & 15) + 1, type = status & 0xf0;
+      const panic = type === 0xb0 && (key === 120 || key === 123);
+      if (panic || type === 0x80 || (type === 0x90 && velocity === 0)) {
+        for (const [id, held] of this.active)
+          if (held.channel === channel && (panic || held.key === key))
+            this.release(id);
+        return;
+      }
+      if (type !== 0x90) return;
+      for (const source of sources) {
+        if ((source.inputChannel ?? source.channel) !== channel) continue;
+        const n = key - (source.baseKey ?? 60) + 1;
+        if (n < 1 || n > limit) continue;
+        this.release(source.id);
+        const stop = this.trigger(source, n, velocity);
+        this.active.set(source.id, { channel, key, stop });
+      }
+    }
+  }
+  return { encode, Output, Input };
 })();

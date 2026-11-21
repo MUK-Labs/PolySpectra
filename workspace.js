@@ -79,6 +79,11 @@ globalThis.PolyWorkspace = (() => {
     const channels = state.sources.map((s, i) => s.channel ?? autoChannel(i));
     if (channels.some((ch, i) => ch !== autoChannel(i)))
       p.set("channels", channels.join(","));
+    // Store only custom routes. A missing input channel follows the source output.
+    state.sources.forEach((s, i) => {
+      if (s.inputChannel != null || (s.baseKey ?? 60) !== 60)
+        p.append("input", [i + 1, s.inputChannel ?? "auto", s.baseKey ?? 60].join("."));
+    });
     for (const l of state.links)
       p.append(
         "link",
@@ -156,6 +161,18 @@ globalThis.PolyWorkspace = (() => {
       if (channels.length !== s.sources.length || !validChannels(channels))
         bad();
       s.sources.forEach((src, i) => (src.channel = channels[i]));
+    }
+    const mapped = new Set();
+    for (const spec of p.getAll("input")) {
+      const match = /^([1-9]\d*)\.(auto|0|[1-9]\d?)\.(0|[1-9]\d{0,2})$/.exec(spec);
+      const src = match && s.sources[Number(match[1]) - 1];
+      if (!src || mapped.has(src.id)) bad();
+      const ch = match[2] === "auto" ? null : Number(match[2]);
+      const key = Number(match[3]);
+      if (ch > 16 || key > 127) bad();
+      src.inputChannel = ch;
+      src.baseKey = key;
+      mapped.add(src.id);
     }
     s.a = p.has("a4") ? Number(p.get("a4")) : s.a;
     s.limit = p.has("partials") ? Number(p.get("partials")) : s.limit;
